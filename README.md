@@ -11,4 +11,5 @@ Collection of tools for various CRI formats
 
   - Multiple streams in sfdmux
   - USM Support
-  - ADX/AHX decoding and encoding.
+  - ADX/AHX decoding and encoding
+  - Write a proper makefile
