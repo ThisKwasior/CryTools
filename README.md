@@ -1,7 +1,7 @@
 # CryTools
 Collection of tools for various CRI formats
 
-###### Programs
+## Programs
  
   - **sfdmux**    - program for muxing mpeg1video and ADX audio.
   - **test_adx**  - prints info about an ADX file.
