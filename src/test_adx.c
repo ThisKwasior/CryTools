@@ -9,21 +9,35 @@ int main(int argc, char** argv)
 	
 	FILE* adxFile = fopen(argv[1], "rb");
 	ADX adx;
-	adx = readADXInfo(adxFile);
+	adx = read_adx_info(adxFile);
+	
+	if(adx.info.magic == 0xFFFF)
+	{
+		printf("This is not an ADX file.\n");
+		return 0;
+	}
 	
 	printf("======ADX INFO======\n");
-	printf("Copyright offset: %u\n", adx.info.copyrightOffset);
-	printf("encType offset: %u\n", adx.info.encType);
-	printf("blockSize offset: %u\n", adx.info.blockSize);
-	printf("bitdepth offset: %u\n", adx.info.bitdepth);
-	printf("channelCount offset: %u\n", adx.info.channelCount);
-	printf("sampleRate offset: %u\n", adx.info.sampleRate);
-	printf("sampleCount offset: %u\n", adx.info.sampleCount);
-	printf("highpassFreq offset: %u\n", adx.info.highpassFreq);
-	printf("version offset: %u\n", adx.info.version);
-	printf("flags offset: %u\n", adx.info.flags);
-	printf("Loop enabled: %u\n", adx.info.loopEnabled);
-	printf("Estimated length: %fs\n", adx.estLength);
+	printf("Copyright offset: %hu/0x%x\n", adx.info.copyright_offset, adx.info.copyright_offset);
+	printf("Encoding type: %u\n", adx.info.enc_type);
+	printf("Block size: %u\n", adx.info.block_size);
+	printf("Bit depth: %u\n", adx.info.bit_depth);
+	printf("Channel count: %u\n", adx.info.channel_count);
+	printf("Sample rate: %u\n", adx.info.sample_rate);
+	printf("Sample count: %u\n", adx.info.sample_count);
+	printf("Highpass frequency: %hu\n", adx.info.highpass_freq);
+	printf("Version: %u\n", adx.info.version);
+	printf("Flags: %u\n", adx.info.flags);
+	printf("Estimated length: %fs\n", adx.est_length);
+	
+	printf("\nLoop enabled: %u\n", adx.loop.loop_flag);
+	if(adx.loop.loop_flag)
+	{
+		printf("Loop start sample: %u\n", adx.loop.loop_start_sample);
+		printf("Loop start byte: %u\n", adx.loop.loop_start_byte);
+		printf("Loop end sample: %u\n", adx.loop.loop_end_sample);
+		printf("Loop end byte: %u\n", adx.loop.loop_end_byte);
+	}
 	
 	fclose(adxFile);
 	return 0;

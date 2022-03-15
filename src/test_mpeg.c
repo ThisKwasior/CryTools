@@ -5,12 +5,14 @@
 #include <mpeg.h>
 #include <utils.h>
 
+#define PL_MPEG_IMPLEMENTATION
+#include <pl_mpeg.h>
+
 int main(int argc, char** argv)
 {	
 	if(argc == 1) return 0;
 
-	struct Mpeg1Frame frame;
-	uint64_t cur_scr = 0;
+	/*struct Mpeg1Frame frame;
 	
 	FILE* sfd = fopen(argv[1], "rb");
 
@@ -24,20 +26,16 @@ int main(int argc, char** argv)
 		printf("\tFDS: %u\n", frame.frame_data_size);
 		printf("\tStr: %u\n", frame.stream);
 		printf("\tAVi: %u\n", frame.av_id);
-		
-		uint8_t* scr_start = 0;
 
 		switch(frame.stream)
 		{
 			case 0xFFFFFFFF:
-				scr_start = &frame.data[4];
-				
-				printf("\tSCR: %u\n", frame.last_scr);
+				printf("\tSCR: %llu\n", frame.last_scr);
 				break;
 				
 			case STREAM_AUDIO:
 				
-				printf("\tSCR: %u\n", frame.last_scr);
+				printf("\tSCR: %llu\n", frame.last_scr);
 				
 				if(frame.is_adx)
 					printf("\tIS ADX\n");
@@ -46,7 +44,7 @@ int main(int argc, char** argv)
 				
 			case STREAM_VIDEO:
 				
-				printf("\tSCR: %u\n", frame.last_scr);
+				printf("\tSCR: %llu\n", frame.last_scr);
 
 				break;
 		}
@@ -54,5 +52,11 @@ int main(int argc, char** argv)
 		printf("\tftell: %x\n", ftell(sfd));
 	}
 	
-	fclose(sfd);
+	fclose(sfd);*/
+	
+	plm_t *plm = plm_create_with_filename(argv[1]);
+	
+	printf("%d %d\n", plm_get_width(plm), plm_get_height(plm));
+	
+	plm_destroy(plm);
 }

@@ -8,7 +8,7 @@ void print_binary(uint8_t* arr, uint32_t size)
 	{
 		for(int8_t it = 7; it != -1; --it)
 		{
-			if((arr[i]>>it)&1 > 0)
+			if(((arr[i]>>it)&1) > 0)
 			{
 				printf("1");
 			}

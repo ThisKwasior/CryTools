@@ -2,11 +2,13 @@
 
 #include <stdint.h>
 #include <stdio.h>
+#include <string.h>
 
 #include "utils.h"
 
 /*
-	Source: https://en.wikipedia.org/wiki/ADX_(file_format)#Technical_Description
+	https://en.wikipedia.org/wiki/ADX_(file_format)#Technical_Description
+	https://wiki.multimedia.cx/index.php/CRI_ADX_file
 */
 
 const static uint8_t adx_frame_value[] = {0x40, 0x04};
@@ -23,29 +25,36 @@ enum EncodingType
 struct AdxBasicInfo
 {
 	uint16_t magic; // Should always be LE 0x0080
-	uint16_t copyrightOffset; // "(c)CRI" string at [copyrightOffset-2] 
-	uint8_t encType; // Encoding type
-	uint8_t blockSize;
-	uint8_t bitdepth;
-	uint8_t channelCount;
-	uint32_t sampleRate;
-	uint32_t sampleCount;
-	uint16_t highpassFreq;
+	uint16_t copyright_offset; // "(c)CRI" string at [copyrightOffset-2] 
+	uint8_t enc_type; // Encoding type
+	uint8_t block_size;
+	uint8_t bit_depth;
+	uint8_t channel_count;
+	uint32_t sample_rate;
+	uint32_t sample_count;
+	uint16_t highpass_freq;
 	uint8_t version;
 	uint8_t flags;
-	uint8_t loopEnabled;
 };
 
 struct AdxLoop
 {
-	
+	uint32_t loop_flag;
+	uint32_t loop_start_sample;
+	uint32_t loop_start_byte;
+	uint32_t loop_end_sample;
+	uint32_t loop_end_byte;
 };
 
 typedef struct Adx
 {
 	struct AdxBasicInfo info;
-	float estLength;
+	uint8_t unknown_loop[16]; /* 4 for v3, 16 for v4 */
+	struct AdxLoop loop;
+	float est_length;
+	
+	uint64_t file_size;
 	
 } ADX;
 
-ADX readADXInfo(FILE* adxFilePtr);
+ADX read_adx_info(FILE* adx_file);

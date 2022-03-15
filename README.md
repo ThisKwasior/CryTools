@@ -7,9 +7,12 @@ Collection of tools for various CRI formats
   - **test_adx**  - prints info about an ADX file.
   - **test_mpeg** - prints info about an MPEG file.
 
-## TODO
+## Work in progress
 
   - Multiple streams in sfdmux
+
+## TODO
+
   - USM Support
   - ADX/AHX decoding and encoding
   - Write a proper makefile

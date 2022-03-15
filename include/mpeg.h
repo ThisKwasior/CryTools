@@ -47,10 +47,10 @@
 
 #define PS_PACK_HEADER 0x000001BA
 #define PS_PARTIAL_HEADER 0x000001BB
-#define PS_PRIV1 0x00001BD
+#define PS_PRIV1 0x000001BD
 #define PS_PADDING 0x000001BE
-#define PS_PRIV2 0x00001BF
-#define PS_MPEG_PROGRAM_END 0x00001B9
+#define PS_PRIV2 0x000001BF
+#define PS_MPEG_PROGRAM_END 0x000001B9
 
 /*
 	Types
@@ -96,3 +96,10 @@ uint64_t mpeg1_decode_scr(const uint8_t* const scr_array);
 */
 
 void mpeg1_encode_scr(uint8_t* arr, const uint64_t scr_value);
+
+/*
+	Write MPEG1 Program End packet.
+	Basically the 'end' of the file
+*/
+
+void mpeg1_write_prog_end(FILE* f);

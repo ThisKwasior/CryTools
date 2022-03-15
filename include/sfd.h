@@ -1,3 +1,10 @@
 #pragma once
 
-const unsigned char sofdecHeader[] = {0, 0, 0x01, 0xBF, 0, 0x14, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x53, 0x6F, 0x66, 0x64, 0x65, 0x63};
+#include <stdlib.h>
+#include <stdio.h>
+#include <string.h>
+
+#include <mpeg.h>
+#include <io_common.h>
+
+void sfd_sofdec2_mpeg_packet(File_desc* fd, const uint8_t fd_size);

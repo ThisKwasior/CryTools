@@ -6,74 +6,70 @@
 #include <mpeg.h>
 #include <utils.h>
 #include <sfd.h>
+#include <io_common.h>
+#include <common.h>
+
+/*
+	Functions used to keep files in check.
+*/
+
+File_desc* prepare_files(int argc, char** argv, uint8_t* files_amount);
+void destroy_file_desc(File_desc* files, const uint8_t files_amount);
 
 /*
 	Gives you the amount of frames ADX file will have and the SCR time step.
-	Returns the ADX data.
 */
-ADX get_adx_frame_info(FILE* adx_file, uint32_t* frame_count, float* time_per_frame);
+void get_adx_frame_info(const ADX* adx, uint32_t* frame_count, float* time_per_frame);
 
 /*
 	Prepares ADX mpeg frame to write
 */
-uint8_t* prepare_adx_mpeg_frame(FILE* adx_file, const float adx_global_scr, uint32_t* data_size);
-
-/*
-	Prints usage and small doc
-*/
-void print_doc();
+uint8_t* prepare_adx_mpeg_frame(FILE* adx_file, const float adx_global_scr, const uint32_t id, uint32_t* data_size);
 
 /*
 	Muxes video and audio
 */
-void mux(const int32_t argc, char** argv);
+void mux(File_desc* files, const uint8_t files_amount);
 
+/*
+	Entry point
+*/
 int main(int argc, char** argv)
 {	
 	if(argc <= 2)
 	{
-		print_doc();
+		printf("Read README-sfdmux for usage.\n");
 		return 0;
 	}
 
-	mux(argc, argv);
+	uint8_t files_amount = 0;
+	File_desc* files_ptr = prepare_files(argc, argv, &files_amount);
+	
+	printf("\nAmount of files: %u\n", files_amount);
+	
+	mux(files_ptr, files_amount);
+	
+	destroy_file_desc(files_ptr, files_amount);
 }
 
-ADX get_adx_frame_info(FILE* adx_file, uint32_t* frame_count, float* time_per_frame)
+void get_adx_frame_info(const ADX* adx, uint32_t* frame_count, float* time_per_frame)
 {
-	uint64_t adx_size = 0;
+	*frame_count = adx->file_size/(MPEG_MAX_DATA_SIZE-7);
 	
-	fseek(adx_file, 0, SEEK_END);
-	adx_size = ftell(adx_file);
-	fseek(adx_file, 0, SEEK_SET);
-	
-	ADX adx = readADXInfo(adx_file);
-	
-	puts("");
-	printf("Size of ADX: %u | 0x%x\n", adx_size, adx_size);
-	
-	*frame_count = adx_size/(MPEG_MAX_DATA_SIZE-7);
-	
-	if(adx_size%(MPEG_MAX_DATA_SIZE-2) != 0)
+	if(adx->file_size%(MPEG_MAX_DATA_SIZE-2) != 0)
 	{
 		*frame_count += 1;
 	}
 	
-	printf("Frame count: %u\n", (*frame_count));
-	
-	*time_per_frame = adx.estLength/(float)(*frame_count);
-	
-	printf("Time per frame: %f\n", (*time_per_frame));
-	
-	return adx;
+	*time_per_frame = adx->est_length/(float)(*frame_count);
 }
 
-uint8_t* prepare_adx_mpeg_frame(FILE* adx_file, const float adx_global_scr, uint32_t* data_size)
+uint8_t* prepare_adx_mpeg_frame(FILE* adx_file, const float adx_global_scr, const uint32_t id, uint32_t* data_size)
 {
 	uint8_t* data = (uint8_t*)calloc(1, MPEG_MAX_DATA_SIZE+6);
 	
 	const uint32_t file_pos_before = ftell(adx_file);
-	const uint32_t stream_id = CHGORD32(MPEG_AUDIO_START_ID + 0);
+	const uint32_t stream_id = change_order_32(id);
 	const uint64_t scr_to_encode = adx_global_scr*MPEG_SCR_MUL;
 	uint8_t scr[5] = {0};
 	mpeg1_encode_scr(scr, scr_to_encode);
@@ -87,7 +83,7 @@ uint8_t* prepare_adx_mpeg_frame(FILE* adx_file, const float adx_global_scr, uint
 	const uint16_t bytes_read = file_pos_after - file_pos_before;
 	
 	// +7 because 0x4004 and 5bytes of SCR
-	const uint16_t bytes_read_BE = CHGORD16(bytes_read+7);
+	const uint16_t bytes_read_BE = change_order_16(bytes_read+7);
 	
 	memcpy(&data[4], &bytes_read_BE, 2);
 
@@ -98,157 +94,177 @@ uint8_t* prepare_adx_mpeg_frame(FILE* adx_file, const float adx_global_scr, uint
 	return data;
 }
 
-void mux(const int32_t argc, char** argv)
+void mux(File_desc* files, const uint8_t files_amount)
 {
-	uint32_t adx_frame_count = 0;
-	float adx_scr_step = 0;
-	float adx_global_scr = 0;
-	float mpeg_global_scr = 0;
-
-	FILE* adxf = fopen(argv[1], "rb");
-	FILE* mpegf = fopen(argv[2], "rb");
-	FILE* sfdf;
-	
-	FILE* logf = fopen("log.txt", "wb");
-	
-	if(argc == 4)
-		sfdf = fopen(argv[3], "wb");
-	else
-		sfdf = fopen("movie.sfd", "wb");
-	
-	/* Init mpeg info */
+	FILE* log = fopen("log.txt", "wb");
 	struct Mpeg1Frame mpeg_frame;
 	memset(&mpeg_frame, 0, sizeof(struct Mpeg1Frame));
 	
-	/* ADX stuff */
-	printf("Writting SFD header\n");
-	fwrite(sofdecHeader, sizeof(sofdecHeader), 1, sfdf);
+	uint8_t adx_done = 0;
+	float mpeg_global_scr = 0;
 	
-	ADX adx = get_adx_frame_info(adxf, &adx_frame_count, &adx_scr_step);
-
-	/* Current characters from the files */
-	uint32_t adxc = 0;
-	uint32_t mpegc = 0;
+	/* SFD header and metadata */
+	printf("Writing SFD header\n");
+	sfd_sofdec2_mpeg_packet(files, files_amount);
 	
-	/* 
-		Had to set it to this instead of 0.
-		Otherwise video is not synced.
-		Decoder starved and can't keep up?
-	*/
-	adx_global_scr += adx_scr_step*10;
-
+	/* Audio must be in the future i guess? */
+	for(uint8_t i = 2; i != files_amount; ++i)
+	{
+		files[i].adx_cur_scr = files[i].adx_scr_step*8;
+	}
+	
 	while(1)
-	{
-		/* Getting next byte from the files */
-		adxc = fgetc(adxf);
-		mpegc = fgetc(mpegf);
-		
-		if(adxc != EOF) 
-			fseek(adxf, -1, SEEK_CUR);
-		
-		if(mpegc != EOF) 
-			fseek(mpegf, -1, SEEK_CUR);
-		
-		if((adxc == EOF) && (mpegc == EOF)) break;
-		
-		if((adxc != EOF && adx_global_scr <= mpeg_global_scr) || (mpegc == EOF))
+	{	
+		if(files[1].file_done == 0)
 		{
-			adx_global_scr += adx_scr_step;
-			uint32_t data_size;
-			const uint8_t* data_to_write = prepare_adx_mpeg_frame(adxf, adx_global_scr, &data_size);
-			fwrite(data_to_write, data_size, 1, sfdf);
-			fprintf(logf, "Writting ADX | %f < %f\n", adx_global_scr, mpeg_global_scr);
-		}
-		
-		if(mpegc != EOF)
-		{
-			mpeg_get_next_frame(mpegf, &mpeg_frame);
+			mpeg_get_next_frame(files[1].f, &mpeg_frame);
 			mpeg_global_scr = mpeg_frame.last_scr/(float)MPEG_SCR_MUL;
-			fwrite(mpeg_frame.data, mpeg_frame.len, 1, sfdf);
-			fprintf(logf, "Video: %d | %f | %f\n", mpeg_frame.stream, mpeg_global_scr, adx_global_scr);
+			fprintf(log, "mpeg scr: %f\n", mpeg_global_scr);
+			
+			if(mpeg_frame.stream == STREAM_VIDEO)
+			{
+				fwrite(mpeg_frame.data, mpeg_frame.len, 1, files[0].f);
+			}
+			
+			if(ftell(files[1].f) == files[1].file_size)
+			{
+				files[1].file_done = 1;
+			}
+		}
+		
+		for(uint8_t i = 2; i != files_amount; ++i)
+		{
+			if(files[i].file_done == 0)
+			{
+				if(files[i].adx_cur_scr <= mpeg_global_scr || files[1].file_done == 1)
+				{
+					uint32_t data_size;
+					const uint8_t* data_to_write = prepare_adx_mpeg_frame(files[i].f, files[i].adx_cur_scr, files[i].stream_id, &data_size);
+					fwrite(data_to_write, data_size, 1, files[0].f);
+					
+					files[i].adx_frame_count -= 1;
+					
+					if(files[i].adx_frame_count == 0)
+					{
+						files[i].file_done = 1;
+						adx_done += 1;
+						printf("ADX Done: %u\n", adx_done);
+					}
+				
+					files[i].adx_cur_scr += files[i].adx_scr_step;
+								
+					fprintf(log, "adx %u scr: %f\n", i-2, files[i].adx_cur_scr);
+				}
+			}
+		}
+		
+		if(adx_done == (files_amount-2))
+		{
+			break;
 		}
 	}
-	
-	/* Mpeg program end */
-
-	const uint8_t pe[] = {0, 0, 1, 0xB9};
-	fwrite(pe, sizeof(pe), sizeof(uint8_t), sfdf);
-	
-	for(uint32_t i = 0; i != 2044; ++i)
-	{
-		fputc(0xFF, sfdf);
-	}
-
-	/* Closing file handles */
-	fclose(adxf);
-	fclose(sfdf);
-	fclose(mpegf);
-	fclose(logf);
 }
 
-void print_doc()
+
+File_desc* prepare_files(int argc, char** argv, uint8_t* files_amount)
 {
-	printf("===========SFDMUX BETA===========\n\n");
-	printf("========USAGE========\n");
-	printf("\n");	
-	printf("\tsfdmux.exe <adx file> <mpeg file> <output file>\n");
-	printf("\n");		
-	printf("\tADX \t- Standard CRI ADPCM audio.\n");
-	printf("\n");	
-	printf("\tMPEG\t- MPEG-PS Video without audio streams.\n");
-	printf("\t\t  Audio streams can be present, but the\n");
-	printf("\t\t  compatibility with games can be low.\n");
-	printf("\n");			  
-	printf("\tOUTPUT\t- Muxed file. Can be ommited.\n");
-	printf("\t\t  If ommited, all work is saved to \"movie.sfd\".\n");
-	printf("\n");
-	printf("========ENCODING TUTORIAL========\n");
-	printf("\n");
-	printf("\tWe'll be using FFmpeg for this.\n");
-	printf("\n");
-	printf("\tFor fast and dirty SFD we need to reencode the source\n");
-	printf("\tto mpeg1video and adpcm_adx.\n");
-	printf("\tHere's as follows:\n");
-	printf("\n");
-	printf("\t\tffmpeg -i video.webm -an -c:v mpeg1video video.mpeg\n");
-	printf("\n");
-	printf("\tResulting video will have no audio streams and bitrate suggested by FFmpeg. \n");
-	printf("\tChange bitrate to your needs.\n");
-	printf("\tAlso some games can be picky about resolutions, change that too if\n");
-	printf("\tthe video skips or game crashes.\n");
-	printf("\n");
-	printf("\tI also recommend 2pass encoding:\n");
-	printf("\n");
-	printf("\t\tffmpeg -i vid.webm -an -c:v mpeg1video -b:v 8M -pass 1 -f mpeg NUL\n");
-	printf("\t\tffmpeg -i vid.webm -an -c:v mpeg1video -b:v 8M -pass 2 -f mpeg video.mpeg\n");
-	printf("\n");
-	printf("\tFor Linux, change NUL to /dev/null\n");
-	printf("\n");
-	printf("\tNow for audio:\n");
-	printf("\n");
-	printf("\t\tffmpeg -i video.webm -vn audio.adx\n");
-	printf("\n");	
-	printf("\tResulting ADX will be of nice quality, but for greater control over this\n");
-	printf("\tI recommend VGAudio.\n");
-	printf("\n");
-	printf("\t\thttps://github.com/Thealexbarney/VGAudio\n");
-	printf("\n");	
-	printf("\tAfter all of this we can finally mux.\n");
-	printf("\n");
-	printf("\t\tsfdmux.exe audio.adx video.mpeg movie.sfd\n");
-	printf("\n");
-	printf("========DISCLAIMER========\n");
-	printf("\n");
-	printf("\tThis program is only intended for muxing audio and video.\n");
-	printf("\tThis means it does not encode anything.\n");
-	printf("\tQuality of the video/audio is dependent on you only.\n");
-	printf("\n");
-	printf("\tProgram is provided as-is blah blah blah.\n");
-	printf("\tDon't sue me over fried PCs or something.\n");
-	printf("\n");
-	printf("========CREDITS========\n");
-	printf("\n");
-	printf("\tProgrammer \t- Kwasior\n");
-	printf("\t\t\t  https://github.com/ThisKwasior\n");
-	printf("\t\t\t  https://twitter.com/ThisKwasior\n");
+	File_desc* files_ptr = calloc(MPEG_MAX_AUDIO_STREAMS+2, sizeof(File_desc));
+	memset(files_ptr, 0, sizeof(File_desc)*(MPEG_MAX_AUDIO_STREAMS+2));
+	*files_amount = 0;
+	
+	uint8_t audio_files_amount = 0;
+	FILE* f;
+	ADX adx;
+	
+	for(uint8_t i = 1; i != argc; ++i)
+	{
+		printf("[%u/%u] %s\n", i, argc-1, argv[i]);
+		
+		/* First file is output */
+		if(i == 1)
+		{
+			printf("\tThis is an output file.\n");
+
+			files_ptr[0].f = fopen(argv[i], "wb");
+			files_ptr[0].is_output = 1;
+			
+			*files_amount += 1;
+
+			continue;
+		}
+		
+		/* 
+			Second file is an mpeg file with all of its streams.
+			All audio streams in it will be ignored.
+		*/
+		if(i == 2)
+		{
+			printf("\tThis is an MPEG file.\n");
+
+			files_ptr[1].f = fopen(argv[i], "rb");
+			files_ptr[1].is_mpeg = 1;
+			
+			fseek(files_ptr[1].f, 0, SEEK_END);
+			files_ptr[1].file_size = ftell(files_ptr[1].f);
+			rewind(files_ptr[1].f);
+			
+			*files_amount += 1;
+
+			continue;
+		}
+		
+		/* Checking if it is an ADX file */
+		f = fopen(argv[i], "rb");
+		adx = read_adx_info(f);
+		fclose(f);
+		
+		if(adx.info.magic == 0x8000)
+		{
+			printf("\tThis is an ADX file.\n");
+			
+			audio_files_amount += 1;
+
+			if((audio_files_amount-1) == MPEG_MAX_AUDIO_STREAMS)
+			{
+				printf("\tMaximum audio files reached.\n");
+				break;
+			}
+			
+			*files_amount += 1;
+			
+			const uint8_t cur_idx = audio_files_amount+1; 
+			
+			files_ptr[cur_idx].stream_id = MPEG_AUDIO_START_ID+(audio_files_amount-1);
+			
+			files_ptr[cur_idx].f = fopen(argv[i], "rb");
+			files_ptr[cur_idx].is_adx = 1;
+			
+			files_ptr[cur_idx].file_size = adx.file_size;
+			get_adx_frame_info(&adx, &files_ptr[cur_idx].adx_frame_count, &files_ptr[cur_idx].adx_scr_step);
+			
+			printf("\tIdx: %u\n", cur_idx);
+			printf("\tSize: %u\n", files_ptr[cur_idx].file_size);
+			printf("\tFrames: %u\n", files_ptr[cur_idx].adx_frame_count);
+			printf("\tStep: %f\n", files_ptr[cur_idx].adx_scr_step);
+			printf("\tID: %08x\n", files_ptr[cur_idx].stream_id);
+			
+			continue;
+		}
+		else
+		{
+			printf("\tThis is not an ADX file.\n");
+		}
+	}
+	
+	return files_ptr;
+}
+
+void destroy_file_desc(File_desc* files, const uint8_t files_amount)
+{
+	for(uint8_t i = 0; i != files_amount; ++i)
+	{
+		fclose(files[i].f);
+	}
+	
+	free(files);
 }

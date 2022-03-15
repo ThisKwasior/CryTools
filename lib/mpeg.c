@@ -13,7 +13,7 @@ void mpeg_get_next_frame(FILE* mpegfile, struct Mpeg1Frame* frame)
 	fread(&frame->sync, sizeof(uint32_t), 1, mpegfile);
 	frame->len = 4;
 
-	frame->sync = CHGORD32(frame->sync);
+	frame->sync = change_order_32(frame->sync);
 
 	switch(frame->sync)
 	{
@@ -32,7 +32,7 @@ void mpeg_get_next_frame(FILE* mpegfile, struct Mpeg1Frame* frame)
 		case PS_PRIV2:
 			fread(&frame->frame_data_size, sizeof(uint16_t), 1, mpegfile);
 			frame->len += 2;
-			frame->frame_data_size = CHGORD16(frame->frame_data_size);
+			frame->frame_data_size = change_order_16(frame->frame_data_size);
 			frame->len += frame->frame_data_size;
 			
 			frame->data = (uint8_t*)malloc(frame->len);
@@ -55,7 +55,7 @@ void mpeg_get_next_frame(FILE* mpegfile, struct Mpeg1Frame* frame)
 		{			
 			fread(&frame->frame_data_size, sizeof(uint16_t), 1, mpegfile);
 			frame->len += 2;
-			frame->frame_data_size = CHGORD16(frame->frame_data_size);
+			frame->frame_data_size = change_order_16(frame->frame_data_size);
 			frame->len += frame->frame_data_size;
 			
 			frame->data = (uint8_t*)malloc(frame->len);
@@ -91,7 +91,7 @@ void mpeg_get_next_frame(FILE* mpegfile, struct Mpeg1Frame* frame)
 				fread(&frame->frame_data_size, sizeof(uint16_t), 1, mpegfile);
 				frame->len += 2;
 				
-				frame->frame_data_size = CHGORD16(frame->frame_data_size);
+				frame->frame_data_size = change_order_16(frame->frame_data_size);
 				frame->len += frame->frame_data_size;
 				
 				frame->data = (uint8_t*)malloc(frame->len);
@@ -119,7 +119,7 @@ void mpeg_get_next_frame(FILE* mpegfile, struct Mpeg1Frame* frame)
 	
 	if(!frame->data && frame->sync != 0)
 	{
-		printf("Unknown sync %p.\n", frame->sync);
+		printf("Unknown sync %x.\n", frame->sync);
 	}
 }
 
@@ -164,4 +164,16 @@ void mpeg1_encode_scr(uint8_t* arr, const uint64_t scr_value)
 	arr[4] |= 1;
 	buf = (scr_value<<1)&254;
 	arr[4] |= buf;
+}
+
+void mpeg1_write_prog_end(FILE* f)
+{
+	//const uint8_t pe[] = {0, 0, 1, 0xB9};
+	const uint32_t pe = change_order_32(PS_MPEG_PROGRAM_END);
+	fwrite(&pe, sizeof(pe), 1, f);
+	
+	for(uint16_t i = 0; i != 2044; ++i)
+	{
+		fputc(0xFF, f);
+	}
 }

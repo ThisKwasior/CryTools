@@ -1,8 +1,8 @@
 echo OFF
 set PROGRAMS= test_mpeg test_adx sfdmux
 set INCLUDES= -I./include
-set LIBS= ./lib/mpeg.c ./lib/utils.c ./lib/adx.c
-set ARGS= -Qn -O2 -s
+set LIBS= ./lib/mpeg.c ./lib/utils.c ./lib/adx.c ./lib/sfd.c
+set ARGS= -O2 -Wl,--gc-sections
 
 mkdir bin
 
