@@ -8,8 +8,8 @@
 
         MPEG    - MPEG-PS Video. Audio will be ignored.
 				  
-        ADX     - Standard CRI ADPCM audio.
-				  Multiple files are supported.
+        ADX/AIX     - Standard CRI ADPCM audio / CRI AIX container
+					  Multiple files are supported.
 
 ========ENCODING TUTORIAL========
 

@@ -57,4 +57,16 @@ typedef struct Adx
 	
 } ADX;
 
+/*
+	Functions 
+*/
+
 ADX read_adx_info(FILE* adx_file);
+
+/*
+	Checks if a file is ADX or AIX
+	0 for unknown
+	1 for ADX
+	2 for AIX
+*/
+uint8_t check_adx_file(FILE* adx_file);

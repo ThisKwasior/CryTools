@@ -27,7 +27,7 @@ void mpeg_get_next_frame(FILE* mpegfile, struct Mpeg1Frame* frame)
 			
 			frame->stream = -1;
 			break;
-		case PS_PARTIAL_HEADER:
+		case PS_SYSTEM_HEADER:
 		case PS_PADDING:
 		case PS_PRIV2:
 			fread(&frame->frame_data_size, sizeof(uint16_t), 1, mpegfile);
@@ -168,12 +168,33 @@ void mpeg1_encode_scr(uint8_t* arr, const uint64_t scr_value)
 
 void mpeg1_write_prog_end(FILE* f)
 {
-	//const uint8_t pe[] = {0, 0, 1, 0xB9};
 	const uint32_t pe = change_order_32(PS_MPEG_PROGRAM_END);
 	fwrite(&pe, sizeof(pe), 1, f);
 	
 	for(uint16_t i = 0; i != 2044; ++i)
 	{
 		fputc(0xFF, f);
+	}
+}
+
+void mpeg1_write_padding(FILE* file, const uint16_t padding_size)
+{
+	uint16_t size = padding_size;
+	uint16_t size_be = 0;
+	const uint32_t sync = change_order_32(PS_PADDING);
+	
+	if(size > 0x7FF)
+	{
+		size = 0x7FF;
+	}
+	
+	size_be = change_order_16(size);
+	
+	fwrite(&sync, sizeof(uint32_t), 1, file);
+	fwrite(&size_be, sizeof(uint16_t), 1, file);
+
+	for(uint16_t i = 0; i != size; ++i)
+	{
+		fputc(0xFF, file);
 	}
 }

@@ -9,6 +9,7 @@ typedef struct FileDescriptor
 {
 	FILE* f;
 	uint8_t is_adx;
+	uint8_t is_aix;
 	uint8_t is_mpeg;
 	uint8_t is_output;
 	
@@ -18,6 +19,8 @@ typedef struct FileDescriptor
 	float adx_scr_step;
 	float adx_cur_scr;
 	uint32_t adx_frame_count;
+	uint8_t channel_count;
+	uint16_t sample_rate;
 	
 	uint8_t file_done;
 	

@@ -27,8 +27,10 @@
 
 /*
 	http://www.mpucoder.com/doom9/packhdr.html#MPEG-1%20Pack%20Header
-	
 	MPEG-1 Pack Header
+	
+	http://stnsoft.com/DVD/sys_hdr.html
+	0x000001BB
 */
 
 /*
@@ -46,7 +48,7 @@
 #define STREAM_AUDIO 2
 
 #define PS_PACK_HEADER 0x000001BA
-#define PS_PARTIAL_HEADER 0x000001BB
+#define PS_SYSTEM_HEADER 0x000001BB
 #define PS_PRIV1 0x000001BD
 #define PS_PADDING 0x000001BE
 #define PS_PRIV2 0x000001BF
@@ -103,3 +105,11 @@ void mpeg1_encode_scr(uint8_t* arr, const uint64_t scr_value);
 */
 
 void mpeg1_write_prog_end(FILE* f);
+
+/*
+	Write MPEG1 Padding packet directly to a file.
+	
+	`padding size` is the size of padding without
+	sync and size. Max size is 0x07FF.
+*/
+void mpeg1_write_padding(FILE* file, const uint16_t padding_size);

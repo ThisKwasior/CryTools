@@ -1,0 +1,50 @@
+= Working as intended:
+	- Sonic Heroes (PC)
+		ADX Audio
+		One track
+	
+	- Sonic Generations (PC)
+		AIX Audio
+		#0 - English
+		#1 - Japanese
+		#2 - French
+		#3 - German
+		#4 - Spanish (Castlian)
+		#5 - Italian
+		
+	- Sonic Colors (Wii)
+		ADX Audio
+		#0 - Japanese
+		#1 - English
+		
+	- Sonic and the Secret Rings (Wii)
+		ADX Audio
+		#0 - Japanese
+		#1 - English
+		
+	- Sonic and the Black Knight (Wii)
+		ADX Audio
+		#0 - Japanese
+		#1 - English
+		
+= It gets somewhere:
+	- F-Zero GX (GC)
+		ADX Audio
+		Video fades in and then out, no sound
+		
+	- Sonic Unleashed (Xbox 360)
+		AIX Audio
+		No multi-lang, video skips and no audio present when using AIX.
+		It does work with single ADX audio track though.
+		
+	- Resident Evil: The Darkside Chronicles (Wii)
+		ADX Audio
+		Audio is present, no video.
+		Mpeg1 stream has some kind of header at the top of each packet.
+		When copy-pasted to muxed sfd it shows a corrupted, static frame.
+		Probably something I don't know how to write yet using FFmpeg.
+	
+	- Sonic Heroes (GC)
+		ADX Audio
+		Needs `SofdecStream` header I think, not `SofdecStream2`.
+		Video plays.

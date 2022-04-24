@@ -54,9 +54,11 @@ int main(int argc, char** argv)
 
 void get_adx_frame_info(const ADX* adx, uint32_t* frame_count, float* time_per_frame)
 {
-	*frame_count = adx->file_size/(MPEG_MAX_DATA_SIZE-7);
+	//*frame_count = adx->file_size/(MPEG_MAX_DATA_SIZE-7);
+	const uint16_t adx_frame_size_full = 2035 + 7;
+	*frame_count = adx->file_size/adx_frame_size_full;
 	
-	if(adx->file_size%(MPEG_MAX_DATA_SIZE-2) != 0)
+	if(adx->file_size%adx_frame_size_full != 0)
 	{
 		*frame_count += 1;
 	}
@@ -66,7 +68,7 @@ void get_adx_frame_info(const ADX* adx, uint32_t* frame_count, float* time_per_f
 
 uint8_t* prepare_adx_mpeg_frame(FILE* adx_file, const float adx_global_scr, const uint32_t id, uint32_t* data_size)
 {
-	uint8_t* data = (uint8_t*)calloc(1, MPEG_MAX_DATA_SIZE+6);
+	uint8_t* data = (uint8_t*)calloc(1, MPEG_MAX_DATA_SIZE+1);
 	
 	const uint32_t file_pos_before = ftell(adx_file);
 	const uint32_t stream_id = change_order_32(id);
@@ -78,7 +80,8 @@ uint8_t* prepare_adx_mpeg_frame(FILE* adx_file, const float adx_global_scr, cons
 	memcpy(&data[6], &adx_frame_value, 2);
 	memcpy(&data[8], scr, 5);
 	
-	fread(&data[13], MPEG_MAX_DATA_SIZE-7, 1, adx_file);
+	// 2035 because all metadata and to fit into 0x800 boundary
+	fread(&data[13], 2035, 1, adx_file);
 	const uint32_t file_pos_after = ftell(adx_file);
 	const uint16_t bytes_read = file_pos_after - file_pos_before;
 	
@@ -87,22 +90,24 @@ uint8_t* prepare_adx_mpeg_frame(FILE* adx_file, const float adx_global_scr, cons
 	
 	memcpy(&data[4], &bytes_read_BE, 2);
 
-	*data_size = bytes_read;
-	
-	*data_size += 13;
-	
+	//  13 being metadata
+	*data_size = bytes_read + 13;
+
 	return data;
 }
 
 void mux(File_desc* files, const uint8_t files_amount)
 {
-	FILE* log = fopen("log.txt", "wb");
+	//FILE* log = fopen("log.txt", "wb");
 	struct Mpeg1Frame mpeg_frame;
 	memset(&mpeg_frame, 0, sizeof(struct Mpeg1Frame));
 	
 	uint8_t adx_done = 0;
 	float mpeg_global_scr = 0;
-	
+
+	// Sonic Unleashed weird hack
+	mpeg1_write_padding(files[0].f, 2042);
+
 	/* SFD header and metadata */
 	printf("Writing SFD header\n");
 	sfd_sofdec2_mpeg_packet(files, files_amount);
@@ -110,20 +115,26 @@ void mux(File_desc* files, const uint8_t files_amount)
 	/* Audio must be in the future i guess? */
 	for(uint8_t i = 2; i != files_amount; ++i)
 	{
-		files[i].adx_cur_scr = files[i].adx_scr_step*8;
+		files[i].adx_cur_scr = files[i].adx_scr_step*4;
 	}
 	
 	while(1)
-	{	
+	{
 		if(files[1].file_done == 0)
 		{
 			mpeg_get_next_frame(files[1].f, &mpeg_frame);
 			mpeg_global_scr = mpeg_frame.last_scr/(float)MPEG_SCR_MUL;
-			fprintf(log, "mpeg scr: %f\n", mpeg_global_scr);
+			//fprintf(log, "mpeg scr: %f\n", mpeg_global_scr);
 			
 			if(mpeg_frame.stream == STREAM_VIDEO)
 			{
 				fwrite(mpeg_frame.data, mpeg_frame.len, 1, files[0].f);
+				const uint16_t dvd_boundary = 2048 - mpeg_frame.len;
+				
+				if(dvd_boundary != 0)
+				{
+					mpeg1_write_padding(files[0].f, dvd_boundary - 6);
+				}
 			}
 			
 			if(ftell(files[1].f) == files[1].file_size)
@@ -153,7 +164,7 @@ void mux(File_desc* files, const uint8_t files_amount)
 				
 					files[i].adx_cur_scr += files[i].adx_scr_step;
 								
-					fprintf(log, "adx %u scr: %f\n", i-2, files[i].adx_cur_scr);
+					//fprintf(log, "adx %u scr: %f\n", i-2, files[i].adx_cur_scr);
 				}
 			}
 		}
@@ -213,33 +224,43 @@ File_desc* prepare_files(int argc, char** argv, uint8_t* files_amount)
 			continue;
 		}
 		
-		/* Checking if it is an ADX file */
+		/* Checking if it is an ADX or AIX file */
+		
+		if((audio_files_amount) == MPEG_MAX_AUDIO_STREAMS)
+		{
+			printf("\tMaximum audio files reached.\n");
+			break;
+		}
+		
 		f = fopen(argv[i], "rb");
 		adx = read_adx_info(f);
 		fclose(f);
 		
-		if(adx.info.magic == 0x8000)
+		if(adx.info.magic != 0xFFFF)
 		{
-			printf("\tThis is an ADX file.\n");
-			
 			audio_files_amount += 1;
-
-			if((audio_files_amount-1) == MPEG_MAX_AUDIO_STREAMS)
-			{
-				printf("\tMaximum audio files reached.\n");
-				break;
-			}
-			
 			*files_amount += 1;
 			
 			const uint8_t cur_idx = audio_files_amount+1; 
 			
+			if(adx.info.magic == 0x8000)
+			{
+				printf("\tThis is an ADX file.\n");
+				files_ptr[cur_idx].is_adx = 1;
+			}
+			if(adx.info.magic == 0x4149)
+			{
+				printf("\tThis is an AIX file.\n");
+				files_ptr[cur_idx].is_aix = 1;
+			}
+			
 			files_ptr[cur_idx].stream_id = MPEG_AUDIO_START_ID+(audio_files_amount-1);
 			
 			files_ptr[cur_idx].f = fopen(argv[i], "rb");
-			files_ptr[cur_idx].is_adx = 1;
 			
 			files_ptr[cur_idx].file_size = adx.file_size;
+			files_ptr[cur_idx].channel_count = adx.info.channel_count;
+			files_ptr[cur_idx].sample_rate = adx.info.sample_rate;
 			get_adx_frame_info(&adx, &files_ptr[cur_idx].adx_frame_count, &files_ptr[cur_idx].adx_scr_step);
 			
 			printf("\tIdx: %u\n", cur_idx);
@@ -250,10 +271,9 @@ File_desc* prepare_files(int argc, char** argv, uint8_t* files_amount)
 			
 			continue;
 		}
-		else
-		{
-			printf("\tThis is not an ADX file.\n");
-		}
+		
+		// If everything failed
+		printf("\tThis is not an ADX/AIX file.\n");
 	}
 	
 	return files_ptr;
