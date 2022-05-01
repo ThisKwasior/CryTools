@@ -23,7 +23,7 @@ void mpeg_get_next_frame(FILE* mpegfile, struct Mpeg1Frame* frame)
 			fseek(mpegfile, -4, SEEK_CUR);
 			fread(frame->data, 1, frame->len, mpegfile);
 			
-			frame->last_scr = mpeg1_decode_scr(&frame->data[4]);
+			frame->last_scr = mpeg_decode_scr(&frame->data[4]);
 			
 			frame->stream = -1;
 			break;
@@ -35,6 +35,7 @@ void mpeg_get_next_frame(FILE* mpegfile, struct Mpeg1Frame* frame)
 			frame->frame_data_size = change_order_16(frame->frame_data_size);
 			frame->len += frame->frame_data_size;
 			
+			// 'data' holds entire packet, with sync and length
 			frame->data = (uint8_t*)malloc(frame->len);
 			fseek(mpegfile, -6, SEEK_CUR);
 			fread(frame->data, 1, frame->len, mpegfile);
@@ -44,7 +45,7 @@ void mpeg_get_next_frame(FILE* mpegfile, struct Mpeg1Frame* frame)
 			frame->len += fread(frame->data, 1, MPEG_MAX_DATA_SIZE, mpegfile);
 			break;
 	}
-
+	
 	// Checking if it's a video stream
 	for(uint8_t i = 0; i < MPEG_MAX_VIDEO_STREAMS; ++i)
 	{
@@ -65,12 +66,74 @@ void mpeg_get_next_frame(FILE* mpegfile, struct Mpeg1Frame* frame)
 			frame->stream = STREAM_VIDEO;
 			frame->av_id = i;
 			
-			/* Something weird with data in some of my encodings */
-			if((frame->data[6] != 0xFF) && (frame->data[6] != 0xF))
+			// Checking if there is any 0xFF padding
+			// and if extension is present
+			uint16_t int_pos = 6;
+			
+			// If data[6] is equal to 0x0F
+			// neither P-STD buffer and PTS/DTS are present
+			if(frame->data[int_pos] == 0x0F)
 			{
-				//printf("Weird: %x\n", frame->data[6]);
-				frame->last_scr = mpeg1_decode_scr(&frame->data[6]);
-				//printf("Weird SCR: %d\n", frame->last_scr);
+				break;
+			}
+
+			// Checking for padding
+			while(frame->data[int_pos] == 0xFF)
+			{
+				int_pos += 1;
+			}
+			
+			// Extension
+			uint8_t val_bits = frame->data[int_pos]>>6;
+			
+			// STD buffer size field
+			frame->p_std_buf_scale = -1;
+			frame->p_std_buf_size = -1;
+			
+			if(val_bits == 1)
+			{
+				// Extracting bit 5
+				// Buffer scale
+				frame->p_std_buf_scale = (frame->data[int_pos]&0x20)>>5;
+				
+				// Extracting buffer size
+				// 13 bytes
+				const uint16_t field = *(uint16_t*)(&frame->data[int_pos]);
+				frame->p_std_buf_size = field&0x1FFF;
+				
+				int_pos += 2;
+			}
+			
+			// Checking for PTS/DTS
+			
+			// Once again, comparing current byte to 0x0F
+			if(frame->data[int_pos] == 0x0F)
+			{
+				break;
+			}
+			
+			val_bits = frame->data[int_pos]>>4;
+			
+			switch(val_bits)
+			{
+				// PTS only, '0010'
+				case 2:
+					frame->last_pts = mpeg_decode_scr(&frame->data[int_pos]);
+					int_pos += 5;
+					break;
+					
+				// PTS and DTS, '0011'
+				// After PTS there's another check for DTS, which is '0001'
+				case 3:
+					frame->last_pts = mpeg_decode_scr(&frame->data[int_pos]);
+					int_pos += 5;
+					
+					val_bits = frame->data[int_pos]>>4;
+					if(val_bits == 1)
+					{
+						frame->last_dts = mpeg_decode_scr(&frame->data[int_pos]);
+					}
+					break;
 			}
 			
 			break;
@@ -105,11 +168,11 @@ void mpeg_get_next_frame(FILE* mpegfile, struct Mpeg1Frame* frame)
 				if(strncmp(adx_frame_value, &frame->data[6], 2) == 0)
 				{
 					frame->is_adx = 1;
-					frame->last_scr = mpeg1_decode_scr(&frame->data[8]);
+					frame->last_scr = mpeg_decode_scr(&frame->data[8]);
 				}
 				else
 				{
-					frame->last_scr = mpeg1_decode_scr(&frame->data[6]);
+					frame->last_scr = mpeg_decode_scr(&frame->data[6]);
 				}
 				
 				break;
@@ -123,7 +186,7 @@ void mpeg_get_next_frame(FILE* mpegfile, struct Mpeg1Frame* frame)
 	}
 }
 
-uint64_t mpeg1_decode_scr(const uint8_t* const scr_array)
+uint64_t mpeg_decode_scr(const uint8_t* const scr_array)
 {
     uint64_t decoded = 0;
     
@@ -142,9 +205,8 @@ uint64_t mpeg1_decode_scr(const uint8_t* const scr_array)
     return decoded;
 }
 
-void mpeg1_encode_scr(uint8_t* arr, const uint64_t scr_value)
+void mpeg_encode_scr(uint8_t* arr, const uint64_t scr_value)
 {
-	
 	uint64_t buf = 0;
 	
 	arr[0] |= 33;
@@ -166,7 +228,7 @@ void mpeg1_encode_scr(uint8_t* arr, const uint64_t scr_value)
 	arr[4] |= buf;
 }
 
-void mpeg1_write_prog_end(FILE* f)
+void mpeg_write_prog_end(FILE* f)
 {
 	const uint32_t pe = change_order_32(PS_MPEG_PROGRAM_END);
 	fwrite(&pe, sizeof(pe), 1, f);
@@ -177,7 +239,7 @@ void mpeg1_write_prog_end(FILE* f)
 	}
 }
 
-void mpeg1_write_padding(FILE* file, const uint16_t padding_size)
+void mpeg_write_padding(FILE* file, const uint16_t padding_size)
 {
 	uint16_t size = padding_size;
 	uint16_t size_be = 0;

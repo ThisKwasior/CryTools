@@ -5,14 +5,11 @@
 #include <mpeg.h>
 #include <utils.h>
 
-#define PL_MPEG_IMPLEMENTATION
-#include <pl_mpeg.h>
-
 int main(int argc, char** argv)
 {	
 	if(argc == 1) return 0;
 
-	/*struct Mpeg1Frame frame;
+	struct Mpeg1Frame frame;
 	
 	FILE* sfd = fopen(argv[1], "rb");
 
@@ -52,11 +49,5 @@ int main(int argc, char** argv)
 		printf("\tftell: %x\n", ftell(sfd));
 	}
 	
-	fclose(sfd);*/
-	
-	plm_t *plm = plm_create_with_filename(argv[1]);
-	
-	printf("%d %d\n", plm_get_width(plm), plm_get_height(plm));
-	
-	plm_destroy(plm);
+	fclose(sfd);
 }

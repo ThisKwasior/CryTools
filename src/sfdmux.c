@@ -27,6 +27,11 @@ void get_adx_frame_info(const ADX* adx, uint32_t* frame_count, float* time_per_f
 uint8_t* prepare_adx_mpeg_frame(FILE* adx_file, const float adx_global_scr, const uint32_t id, uint32_t* data_size);
 
 /*
+	Returns start time of mpeg stream
+*/
+float get_mpeg_start_time(FILE* mpeg_file);
+
+/*
 	Muxes video and audio
 */
 void mux(File_desc* files, const uint8_t files_amount);
@@ -74,7 +79,7 @@ uint8_t* prepare_adx_mpeg_frame(FILE* adx_file, const float adx_global_scr, cons
 	const uint32_t stream_id = change_order_32(id);
 	const uint64_t scr_to_encode = adx_global_scr*MPEG_SCR_MUL;
 	uint8_t scr[5] = {0};
-	mpeg1_encode_scr(scr, scr_to_encode);
+	mpeg_encode_scr(scr, scr_to_encode);
 
 	memcpy(&data[0], &stream_id, 4);
 	memcpy(&data[6], &adx_frame_value, 2);
@@ -106,16 +111,19 @@ void mux(File_desc* files, const uint8_t files_amount)
 	float mpeg_global_scr = 0;
 
 	// Sonic Unleashed weird hack
-	mpeg1_write_padding(files[0].f, 2042);
+	mpeg_write_padding(files[0].f, 2042);
 
 	/* SFD header and metadata */
 	printf("Writing SFD header\n");
 	sfd_sofdec2_mpeg_packet(files, files_amount);
 	
+	// Getting start time of video stream	
+	mpeg_global_scr = get_mpeg_start_time(files[1].f);
+	
 	/* Audio must be in the future i guess? */
 	for(uint8_t i = 2; i != files_amount; ++i)
 	{
-		files[i].adx_cur_scr = files[i].adx_scr_step*4;
+		files[i].adx_cur_scr = mpeg_global_scr;
 	}
 	
 	while(1)
@@ -124,7 +132,6 @@ void mux(File_desc* files, const uint8_t files_amount)
 		{
 			mpeg_get_next_frame(files[1].f, &mpeg_frame);
 			mpeg_global_scr = mpeg_frame.last_scr/(float)MPEG_SCR_MUL;
-			//fprintf(log, "mpeg scr: %f\n", mpeg_global_scr);
 			
 			if(mpeg_frame.stream == STREAM_VIDEO)
 			{
@@ -133,7 +140,7 @@ void mux(File_desc* files, const uint8_t files_amount)
 				
 				if(dvd_boundary != 0)
 				{
-					mpeg1_write_padding(files[0].f, dvd_boundary - 6);
+					mpeg_write_padding(files[0].f, dvd_boundary - 6);
 				}
 			}
 			
@@ -163,8 +170,6 @@ void mux(File_desc* files, const uint8_t files_amount)
 					}
 				
 					files[i].adx_cur_scr += files[i].adx_scr_step;
-								
-					//fprintf(log, "adx %u scr: %f\n", i-2, files[i].adx_cur_scr);
 				}
 			}
 		}
@@ -174,8 +179,24 @@ void mux(File_desc* files, const uint8_t files_amount)
 			break;
 		}
 	}
+	
+	mpeg_write_prog_end(files[0].f);
 }
 
+float get_mpeg_start_time(FILE* mpeg_file)
+{
+	const uint64_t file_pos = ftell(mpeg_file);
+	struct Mpeg1Frame mpeg_frame;
+	memset(&mpeg_frame, 0, sizeof(struct Mpeg1Frame));
+	
+	while(mpeg_frame.stream != STREAM_VIDEO)
+	{
+		mpeg_get_next_frame(mpeg_file, &mpeg_frame);
+	}
+	
+	fseek(mpeg_file, file_pos, SEEK_SET);
+	return mpeg_frame.last_pts/(float)MPEG_SCR_MUL;
+}
 
 File_desc* prepare_files(int argc, char** argv, uint8_t* files_amount)
 {

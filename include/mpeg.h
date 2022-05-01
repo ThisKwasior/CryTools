@@ -12,6 +12,8 @@
 	http://dvd.sourceforge.net/dvdinfo/index.html
 	
     // Packets
+	http://stnsoft.com/DVD/mpeghdrs.html
+	
     MPEG_program_end   			//0xB9
     pack_start         			//0xBA
     system_header_start			//0xBB
@@ -43,6 +45,7 @@
 #define MPEG_VIDEO_START_ID 0x000001E0
 #define MPEG_AUDIO_START_ID 0x000001C0
 #define MPEG_MAX_DATA_SIZE 2047
+#define MPEG_DATA_MAX_TO_2048 2035
 
 #define STREAM_VIDEO 1
 #define STREAM_AUDIO 2
@@ -53,6 +56,8 @@
 #define PS_PADDING 0x000001BE
 #define PS_PRIV2 0x000001BF
 #define PS_MPEG_PROGRAM_END 0x000001B9
+
+#define PS_SEQ_HEADER 0x000001B3
 
 /*
 	Types
@@ -66,8 +71,32 @@ struct Mpeg1Frame
 	int8_t stream;
 	uint8_t* data;
 	uint8_t av_id;
-	uint64_t last_scr;
+	uint64_t last_scr : 33;
 	uint8_t is_adx;
+	
+	uint8_t p_std_buf_scale : 1;
+	uint16_t p_std_buf_size : 13;
+	
+	uint64_t last_pts : 33;
+	uint64_t last_dts : 33;
+};
+
+struct MpegStreamInfo
+{
+	uint8_t codec; 	/* 1 = m1v, 2 = m2v */
+	
+	uint16_t width : 12;
+	uint16_t height : 12;
+	uint16_t aspect_ratio : 4;
+	uint16_t frame_rate : 4;
+	uint32_t bitrate : 18;
+	uint16_t vbv_buff_size : 10;
+	uint8_t const_param_flag : 1;
+	uint8_t intra_quant_flag : 1;
+	uint8_t non_intra_quant_flag : 1;
+	
+	uint8_t intra_quant[64];
+	uint8_t non_intra_quant[64];
 };
 
 /*
@@ -75,36 +104,39 @@ struct Mpeg1Frame
 
 */
 
+
 /*
 	TODO:
 	Check if audio frame is ADX (0x4004)
 */
-
 void mpeg_get_next_frame(FILE* mpegfile, struct Mpeg1Frame* frame);
 
 /*
-	Decodes the MPEG-1 SCR.
+	Get info about the m1v/m2v stream
+
+void mpeg_read_info_from_data(uint8_t* data, struct MpegStreamInfo* info);
+*/
+
+/*
+	Decodes the MPEG SCR.
 	Takes the pointer to array of 5 bytes beginning with 0010b.
 
 	Returns decoded MPEG-1 SCR value.
 */
-
-uint64_t mpeg1_decode_scr(const uint8_t* const scr_array);
+uint64_t mpeg_decode_scr(const uint8_t* const scr_array);
 
 /*
 	Encodes the MPEG-1 SCR from 33bit number.
 	Takes uint64_t with the value to encode
 	and uint8_t* array of 5, which will store MPEG-1 SCR value.
 */
-
-void mpeg1_encode_scr(uint8_t* arr, const uint64_t scr_value);
+void mpeg_encode_scr(uint8_t* arr, const uint64_t scr_value);
 
 /*
 	Write MPEG1 Program End packet.
 	Basically the 'end' of the file
 */
-
-void mpeg1_write_prog_end(FILE* f);
+void mpeg_write_prog_end(FILE* f);
 
 /*
 	Write MPEG1 Padding packet directly to a file.
@@ -112,4 +144,5 @@ void mpeg1_write_prog_end(FILE* f);
 	`padding size` is the size of padding without
 	sync and size. Max size is 0x07FF.
 */
-void mpeg1_write_padding(FILE* file, const uint16_t padding_size);
+void mpeg_write_padding(FILE* file, const uint16_t padding_size);
+

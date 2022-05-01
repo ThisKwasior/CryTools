@@ -74,7 +74,7 @@ void sfd_sofdec2_mpeg_packet(File_desc* fd, const uint8_t fd_size)
 	/*
 		Padding
 	*/
-	mpeg1_write_padding(fd[0].f, 6);
+	mpeg_write_padding(fd[0].f, 6);
 	
 	/*
 		sfdmux info
@@ -87,7 +87,7 @@ void sfd_sofdec2_mpeg_packet(File_desc* fd, const uint8_t fd_size)
 	/*
 		Padding again
 	*/
-	mpeg1_write_padding(fd[0].f, MPEG_MAX_DATA_SIZE-info_size-11);
+	mpeg_write_padding(fd[0].f, MPEG_MAX_DATA_SIZE-info_size-11);
 	
 	free(buffer);
 }
