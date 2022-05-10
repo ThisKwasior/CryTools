@@ -14,5 +14,5 @@ Collection of tools for various CRI formats
 ## TODO
 
   - USM Support
-  - ADX/AHX decoding and encoding
+  - ADX/AIX/AHX decoding and encoding
   - Write a proper makefile
