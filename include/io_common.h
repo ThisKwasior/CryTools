@@ -30,6 +30,9 @@ typedef struct FileDescriptor
 	Reading
 */
 
+void io_read_bits(const uint8_t* data, uint8_t* buffer, const uint32_t buffer_start_bit,
+				  const uint32_t data_start_bit, const uint32_t data_bits_to_read);
+
 uint8_t io_read_uint8(const uint8_t* data, uint64_t* data_pos);
 
 uint16_t io_read_uint16(const uint8_t* data, uint64_t* data_pos);

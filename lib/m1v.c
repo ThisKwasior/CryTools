@@ -1,0 +1,223 @@
+#include <m1v.h>
+
+uint64_t m1v_next_packet(M1v_info* m1v)
+{
+	if(m1v->file_pos == m1v->file_size) return 0;
+	
+	uint8_t* data = &m1v->file_buffer[m1v->file_pos];
+	const uint32_t sync = change_order_32(*(uint32_t*)&data[0]);
+	m1v->last_stream_id = data[3];
+	uint64_t ret = 4;
+	
+	switch(sync)
+	{
+		case M1V_SEQ_HEAD:
+			ret += m1v_sequence_header(&data[4], m1v);
+			break;
+		case M1V_GOP:
+			ret += m1v_gop(&data[4], m1v);
+			break;
+		case M1V_PIC_HEAD:
+			ret += m1v_picture_header(&data[4], m1v);
+			break;
+		case M1V_USER_DATA:
+			ret += m1v_user_data(&data[4], m1v);
+			break;
+	}
+	
+	if(m1v_is_slice_sync(sync))
+	{
+		//printf("\tIt's a slice: %u\n", stream_id);
+		ret += m1v_slice(&data[4], m1v, m1v->last_stream_id);
+	}
+	
+	m1v->file_pos += ret;
+	
+	return ret;
+}
+
+/*
+	Checks
+*/
+
+uint8_t m1v_is_slice(const uint8_t stream_id)
+{
+	return ((stream_id >= M1V_SLICE_FIRST) && (stream_id <= M1V_SLICE_LAST));
+}
+
+uint8_t m1v_is_slice_sync(const uint32_t sync)
+{
+	const uint8_t stream_id = (sync&0x000000FF);
+	const uint32_t prefix = (sync>>8);
+	return ((prefix==1) && (stream_id >= M1V_SLICE_FIRST) && (stream_id <= M1V_SLICE_LAST));
+}
+
+/*
+	m1v packets
+*/
+
+// M1V_SEQ_HEAD 0x000001B3
+uint64_t m1v_sequence_header(const uint8_t* data, M1v_info* m1v)
+{
+	uint64_t ret = 0;
+	const uint32_t first_4_bytes = change_order_32(*(uint32_t*)&data[0]);
+	const uint32_t second_4_bytes = change_order_32(*(uint32_t*)&data[4]);
+	ret+=8;
+	
+	m1v->width = (first_4_bytes&0xFFF00000)>>20;
+	m1v->height = (first_4_bytes&0x000FFF00)>>8;
+	m1v->aspect_ratio = (first_4_bytes&0x000000F0)>>4;
+	m1v->frame_rate = (first_4_bytes&0x0000000F);
+	m1v->bitrate = (second_4_bytes&0xFFFFC000)>>14;
+	m1v->vbv_buf_size = (second_4_bytes&0x00001FF8)>>3;
+	
+	m1v->constrained_params_flag = (second_4_bytes&0x00000004)>>2;
+	m1v->load_intra_quant_matrix = (second_4_bytes&0x00000002)>>1;
+	//m1v->load_nonintra_quant_matrix = (second_4_bytes&0x00000001);
+	
+	if(m1v->load_intra_quant_matrix)
+	{
+		memcpy(m1v->intra_quant_matrix, &data[ret], 64);
+		ret+=64;
+	}
+	
+	m1v->load_nonintra_quant_matrix = (data[ret-1]&0x01);
+	if(m1v->load_nonintra_quant_matrix)
+	{
+		memcpy(m1v->nonintra_quant_matrix, &data[ret], 64);
+		ret+=64;
+	}
+	
+	return ret;
+}
+
+// M1V_GOP 0x000001B8
+uint64_t m1v_gop(const uint8_t* data, M1v_info* m1v)
+{
+	uint64_t ret = 0;
+	const uint32_t first_4_bytes = change_order_32(*(uint32_t*)&data[0]);
+	const uint16_t first_2_bytes = change_order_16(*(uint16_t*)&data[0]);
+	ret+=4;
+	
+	m1v->drop_frame_flag = (first_4_bytes&0x80000000)>>31;
+	m1v->time_hour = (first_4_bytes&0x7C000000)>>26;
+	m1v->time_minute = (first_4_bytes&0x03F00000)>>20;
+	m1v->time_second = (first_4_bytes&0x0007E000)>>13;
+	m1v->gop_frame = (first_4_bytes&0x00001F80)>>7;
+	m1v->closed_gop = (first_4_bytes&0x00000040)>>6;
+	m1v->broken_gop = (first_4_bytes&0x00000020)>>5;
+	
+	return ret;
+}
+
+// M1V_PIC_HEAD 0x00000100
+uint64_t m1v_picture_header(const uint8_t* data, M1v_info* m1v)
+{
+	uint64_t ret = 0;
+	const uint16_t first_2_bytes = change_order_16(*(uint16_t*)&data[0]);
+	const uint32_t first_4_bytes = change_order_32(*(uint32_t*)&data[0]);
+	const uint16_t last_2_bytes = change_order_16(*(uint16_t*)&data[3]); // If there are any appended fields
+	ret+=4;
+	
+	m1v->temp_seq_num = (first_2_bytes&0xFFC0)>>6;
+	m1v->frame_type = (data[1]&0x38)>>3;
+	m1v->vbv_delay = (first_4_bytes&0x0007FFF8)>>3;
+	
+	if((m1v->frame_type == M1V_FRAME_P) || (m1v->frame_type == M1V_FRAME_B)) // Appended data
+	{
+		ret+=1;
+		m1v->full_pel_forward_vector = (last_2_bytes&0x0400)>>10;
+		m1v->forward_f_code = (last_2_bytes&0x0380)>>7;
+		
+		if(m1v->frame_type == M1V_FRAME_B) // Appended data for frame B
+		{
+			m1v->full_pel_backward_vector = (last_2_bytes&0x0040)>>6;
+			m1v->backward_f_code = (last_2_bytes&0x0038)>>3;
+		}
+	}
+	
+	return ret;
+}
+
+// M1V_SLICE 0x01-0xAF
+uint64_t m1v_slice(const uint8_t* data, M1v_info* m1v, const uint8_t slice_id)
+{
+	uint64_t end_pos = 0;
+	uint8_t done = 0;
+	
+	// Check where tf the end is
+	while(!done)
+	{
+		const uint32_t sync = change_order_32(*(uint32_t*)&data[end_pos]);
+		
+		switch(sync)
+		{
+			case M1V_SEQ_HEAD:
+			case M1V_GOP:
+			case M1V_PIC_HEAD:
+			case M1V_EXTENSION:
+			case M1V_USER_DATA:
+				done = 1;
+				break;
+		}
+		
+		if(m1v_is_slice_sync(sync))
+		{
+			done = 1;
+		}
+		
+		end_pos += 1;
+		
+		if((m1v->file_pos+end_pos+3) == m1v->file_size) done = 1;
+	}
+	
+	end_pos -= 1;
+	
+	m1v->slice_size = end_pos;
+	
+	return end_pos;
+}
+
+// M1V_USER_DATA 0x000001B2
+uint64_t m1v_user_data(const uint8_t* data, M1v_info* m1v)
+{
+	if(m1v->user_data) free(m1v->user_data);
+		
+	uint64_t end_pos = 0;
+	uint8_t done = 0;
+	
+	// Check where tf the end is
+	while(!done)
+	{
+		const uint32_t sync = change_order_32(*(uint32_t*)&data[end_pos]);
+		
+		switch(sync)
+		{
+			case M1V_SEQ_HEAD:
+			case M1V_GOP:
+			case M1V_PIC_HEAD:
+			case M1V_EXTENSION:
+			case M1V_USER_DATA:
+				done = 1;
+				break;
+		}
+		
+		if(m1v_is_slice_sync(sync))
+		{
+			done = 1;
+		}
+		
+		end_pos += 1;
+		
+		if((m1v->file_pos+end_pos+3) == m1v->file_size) done = 1;
+	}
+	
+	end_pos -= 1;
+	
+	m1v->user_data_size = end_pos+1;
+	m1v->user_data = (uint8_t*)malloc(m1v->user_data_size);
+	memset(m1v->user_data, 0, m1v->user_data_size);
+	memcpy(m1v->user_data, data, m1v->user_data_size);
+	
+	return end_pos;
+}

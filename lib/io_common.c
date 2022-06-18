@@ -4,6 +4,37 @@
 	Reading
 */
 
+void io_read_bits(const uint8_t* data, uint8_t* buffer, const uint32_t buffer_start_bit,
+				  const uint32_t data_start_bit, const uint32_t data_bits_to_read)
+{
+	uint32_t buffer_current_bit = buffer_start_bit;
+	uint32_t buffer_bit = buffer_current_bit%8;
+	uint32_t buffer_index = (buffer_current_bit-buffer_bit)/8;
+	
+	uint32_t data_current_bit = data_start_bit;
+	uint32_t data_bit = data_current_bit%8;
+	uint32_t data_index = (data_current_bit-data_bit)/8;
+	
+	//printf("%u %u | %u %u\n", buffer_index, buffer_bit, data_index, data_bit);
+	
+	for(uint32_t i = 0; i != data_bits_to_read; ++i)
+	{
+		const uint8_t read_bit = (data[data_index]&(1<<(7-data_bit)))>>(7-data_bit);
+		buffer[buffer_index] |= read_bit<<buffer_bit;
+		
+		//printf("%u %u | %u %u | %u\n", buffer_index, buffer_bit, data_index, data_bit, read_bit);
+		
+		buffer_current_bit+=1;
+		buffer_bit = buffer_current_bit%8;
+		buffer_index = (buffer_current_bit-buffer_bit)/8;
+		
+		data_current_bit+=1;
+	    data_bit = data_current_bit%8;
+	    data_index = (data_current_bit-data_bit)/8;
+	}
+
+}
+
 uint8_t io_read_uint8(const uint8_t* data, uint64_t* data_pos)
 {
 	uint8_t number = *((uint8_t*)&data[*data_pos]);
