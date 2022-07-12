@@ -1,5 +1,41 @@
 #include <m1v.h>
 
+uint8_t m1v_init(uint8_t* file_path, M1v_info* m1v)
+{
+	memset(m1v, 0, sizeof(M1v_info));
+	
+	// Opening a file
+	m1v->file_pointer = fopen(file_path, "rb");
+	
+	if(m1v->file_pointer == NULL)
+	{
+		return 1;
+	}
+	
+	// Load file
+	fseek(m1v->file_pointer, 0, SEEK_END);
+	m1v->file_size = ftell(m1v->file_pointer);
+	fseek(m1v->file_pointer, 0, SEEK_SET);
+	m1v->file_buffer = (uint8_t*)malloc(m1v->file_size);
+	fread(m1v->file_buffer, m1v->file_size, 1, m1v->file_pointer);
+	fclose(m1v->file_pointer);
+	
+	if(m1v->file_buffer == NULL)
+	{
+		return 2;
+	}
+	
+	return 0;
+}
+
+void m1v_destroy(M1v_info* m1v)
+{
+	free(m1v->file_buffer);
+	free(m1v->user_data);
+	
+	fclose(m1v->file_pointer);
+}
+
 uint64_t m1v_next_packet(M1v_info* m1v)
 {
 	if(m1v->file_pos == m1v->file_size) return 0;
@@ -23,12 +59,24 @@ uint64_t m1v_next_packet(M1v_info* m1v)
 		case M1V_USER_DATA:
 			ret += m1v_user_data(&data[4], m1v);
 			break;
+		case M1V_EXTENSION:
+			ret += m1v_extension(&data[4], m1v);
+			break;
 	}
 	
 	if(m1v_is_slice_sync(sync))
 	{
 		//printf("\tIt's a slice: %u\n", stream_id);
 		ret += m1v_slice(&data[4], m1v, m1v->last_stream_id);
+	}
+	
+	// If codec is not set, default to m1v.
+	// Otherwise, it will be set to 2
+	// when it enters M1V_EXTENSION.
+	// I hope it's only used in MPEG-2 Part 2.
+	if(m1v->codec == 0)
+	{
+		m1v->codec = 1;
 	}
 	
 	m1v->file_pos += ret;
@@ -51,6 +99,46 @@ uint8_t m1v_is_slice_sync(const uint32_t sync)
 	const uint32_t prefix = (sync>>8);
 	return ((prefix==1) && (stream_id >= M1V_SLICE_FIRST) && (stream_id <= M1V_SLICE_LAST));
 }
+
+uint64_t m1v_find_next_valid(const uint8_t* data, M1v_info* m1v)
+{
+	uint64_t ret = 0;
+	uint8_t done = 0;
+	
+	// Check where tf the end is
+	while(!done)
+	{
+		const uint32_t sync = change_order_32(*(uint32_t*)&data[ret]);
+		
+		switch(sync)
+		{
+			case M1V_SEQ_HEAD:
+			case M1V_GOP:
+			case M1V_PIC_HEAD:
+			case M1V_EXTENSION:
+			case M1V_USER_DATA:
+				done = 1;
+				break;
+		}
+		
+		if(m1v_is_slice_sync(sync))
+		{
+			done = 1;
+		}
+		
+		ret += 1;
+		
+		if((m1v->file_pos+ret+3) == m1v->file_size)
+		{
+			done = 1;
+		}
+	}
+	
+	ret -= 1;
+	
+	return ret;
+}
+	
 
 /*
 	m1v packets
@@ -142,37 +230,7 @@ uint64_t m1v_picture_header(const uint8_t* data, M1v_info* m1v)
 // M1V_SLICE 0x01-0xAF
 uint64_t m1v_slice(const uint8_t* data, M1v_info* m1v, const uint8_t slice_id)
 {
-	uint64_t end_pos = 0;
-	uint8_t done = 0;
-	
-	// Check where tf the end is
-	while(!done)
-	{
-		const uint32_t sync = change_order_32(*(uint32_t*)&data[end_pos]);
-		
-		switch(sync)
-		{
-			case M1V_SEQ_HEAD:
-			case M1V_GOP:
-			case M1V_PIC_HEAD:
-			case M1V_EXTENSION:
-			case M1V_USER_DATA:
-				done = 1;
-				break;
-		}
-		
-		if(m1v_is_slice_sync(sync))
-		{
-			done = 1;
-		}
-		
-		end_pos += 1;
-		
-		if((m1v->file_pos+end_pos+3) == m1v->file_size) done = 1;
-	}
-	
-	end_pos -= 1;
-	
+	const uint64_t end_pos = m1v_find_next_valid(data, m1v);
 	m1v->slice_size = end_pos;
 	
 	return end_pos;
@@ -183,36 +241,7 @@ uint64_t m1v_user_data(const uint8_t* data, M1v_info* m1v)
 {
 	if(m1v->user_data) free(m1v->user_data);
 		
-	uint64_t end_pos = 0;
-	uint8_t done = 0;
-	
-	// Check where tf the end is
-	while(!done)
-	{
-		const uint32_t sync = change_order_32(*(uint32_t*)&data[end_pos]);
-		
-		switch(sync)
-		{
-			case M1V_SEQ_HEAD:
-			case M1V_GOP:
-			case M1V_PIC_HEAD:
-			case M1V_EXTENSION:
-			case M1V_USER_DATA:
-				done = 1;
-				break;
-		}
-		
-		if(m1v_is_slice_sync(sync))
-		{
-			done = 1;
-		}
-		
-		end_pos += 1;
-		
-		if((m1v->file_pos+end_pos+3) == m1v->file_size) done = 1;
-	}
-	
-	end_pos -= 1;
+	const uint64_t end_pos = m1v_find_next_valid(data, m1v);
 	
 	m1v->user_data_size = end_pos+1;
 	m1v->user_data = (uint8_t*)malloc(m1v->user_data_size);
@@ -220,4 +249,36 @@ uint64_t m1v_user_data(const uint8_t* data, M1v_info* m1v)
 	memcpy(m1v->user_data, data, m1v->user_data_size);
 	
 	return end_pos;
+}
+
+// M1V_EXTENSION 0x000001B5
+uint64_t m1v_extension(const uint8_t* data, M1v_info* m1v)
+{
+	uint64_t ret = 0;
+	
+	const uint8_t ext_type = data[0]>>4;
+	
+	switch(ext_type)
+	{
+		// TODO: This. Will I need it? Probably not.
+		// Would be great when decoding? Certainly.
+		/*case 0x01: // Sequence_Extension
+			break;
+		case 0x02: // Sequence_Display_Extension
+			break;
+		case 0x07: // Picture_Display_Extension
+			break;
+		case 0x08: // Picture_Coding_Extension
+			break;*/
+			
+		default:
+			// Somehow, all cases failed.
+			// Find next valid packet to process
+			ret += m1v_find_next_valid(data, m1v);
+	}
+	
+	// We now know it's MPEG-2 Part 2
+	m1v->codec = 2;
+	
+	return ret;
 }

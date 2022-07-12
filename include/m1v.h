@@ -42,6 +42,7 @@ typedef struct M1V_INFO
 	uint64_t file_size;
 	uint64_t file_pos;
 	uint8_t* file_buffer;
+	FILE* file_pointer;
 	
 	// Sequence header
 	uint16_t width : 12; // Horizontal size
@@ -72,11 +73,11 @@ typedef struct M1V_INFO
 	uint8_t frame_type : 3;		// 1=I, 2=P, 3=B, 4=D
 	uint16_t vbv_delay;
 	
-		// If frame_type = 2 (P) or 3 (B)
+	// If frame_type = 2 (P) or 3 (B)
 	uint8_t full_pel_forward_vector : 1;
 	uint8_t forward_f_code : 3;
 	
-		// Appended if frame_type = 3 (B)
+	// Appended if frame_type = 3 (B)
 	uint8_t full_pel_backward_vector : 1;
 	uint8_t backward_f_code : 3;
 	
@@ -89,6 +90,23 @@ typedef struct M1V_INFO
 	
 	
 } M1v_info;
+
+/*
+	Initializes the M1v_info structure
+	and opens a file.
+	
+	Returns
+		0 on success
+		1 on file error
+		2 on malloc error
+*/
+uint8_t m1v_init(uint8_t* file_path, M1v_info* m1v);
+
+/*
+	Frees contents of the struct
+	but not the struct itself
+*/
+void m1v_destroy(M1v_info* m1v);
 
 /*
 	Takes data and M1v_info pointers.
@@ -104,6 +122,8 @@ uint64_t m1v_next_packet(M1v_info* m1v);
 uint8_t m1v_is_slice(const uint8_t stream_id);
 uint8_t m1v_is_slice_sync(const uint32_t sync);
 
+uint64_t m1v_find_next_valid(const uint8_t* data, M1v_info* m1v);
+
 /*
 	m1v packets
 */
@@ -111,7 +131,8 @@ uint8_t m1v_is_slice_sync(const uint32_t sync);
 uint64_t m1v_sequence_header(const uint8_t* data, M1v_info* m1v);
 uint64_t m1v_gop(const uint8_t* data, M1v_info* m1v);
 uint64_t m1v_picture_header(const uint8_t* data, M1v_info* m1v);
-
 uint64_t m1v_slice(const uint8_t* data, M1v_info* m1v, const uint8_t slice_id);
-
 uint64_t m1v_user_data(const uint8_t* data, M1v_info* m1v);
+
+// Pure hell
+uint64_t m1v_extension(const uint8_t* data, M1v_info* m1v);
