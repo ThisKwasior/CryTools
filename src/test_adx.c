@@ -7,9 +7,9 @@ int main(int argc, char** argv)
 {
 	if(argc == 1) return 0;
 	
-	FILE* adxFile = fopen(argv[1], "rb");
+	//FILE* adxFile = fopen(argv[1], "rb");
 	ADX adx;
-	adx = read_adx_info(adxFile);
+	adx = adx_read_info(argv[1]);
 	
 	if(adx.info.magic == 0xFFFF)
 	{
@@ -39,6 +39,5 @@ int main(int argc, char** argv)
 		printf("Loop end byte: %u\n", adx.loop.loop_end_byte);
 	}
 	
-	fclose(adxFile);
 	return 0;
 }

@@ -3,8 +3,9 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string.h>
+#include <stdlib.h>
 
-#include "utils.h"
+#include <common.h>
 
 /*
 	https://en.wikipedia.org/wiki/ADX_(file_format)#Technical_Description
@@ -51,9 +52,12 @@ typedef struct Adx
 	struct AdxBasicInfo info;
 	uint8_t unknown_loop[16]; /* 4 for v3, 16 for v4 */
 	struct AdxLoop loop;
-	float est_length;
+	
+	double est_length;
 	
 	uint64_t file_size;
+	uint64_t file_pos;
+	uint8_t* file_buffer;
 	
 } ADX;
 
@@ -61,7 +65,8 @@ typedef struct Adx
 	Functions 
 */
 
-ADX read_adx_info(FILE* adx_file);
+//ADX read_adx_info(FILE* adx_file);
+ADX adx_read_info(const uint8_t* file_path);
 
 /*
 	Checks if a file is ADX or AIX
@@ -69,4 +74,8 @@ ADX read_adx_info(FILE* adx_file);
 	1 for ADX
 	2 for AIX
 */
-uint8_t check_adx_file(FILE* adx_file);
+//uint8_t check_adx_file(FILE* adx_file);
+uint8_t adx_check_file(const uint8_t* file_path);
+
+
+void adx_free(ADX* adx);

@@ -10,6 +10,7 @@ Collection of tools for various CRI formats
 ## Work in progress
 
   - Multiple streams in sfdmux
+  - **csc_video_conv** - converts "overexposed" SFDs to watchable files.
 
 ## TODO
 

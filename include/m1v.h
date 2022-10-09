@@ -20,29 +20,34 @@
 #define M1V_FRAME_B		3
 #define M1V_FRAME_D		4
 
-static const float mpeg1_par[] = {-1.f, 1.f, 0.6735f, 0.7031f,
+static const float mpeg1_par[] = {0.f, 1.f, 0.6735f, 0.7031f,
 								  0.7615f, 0.8055f, 0.8437f, 0.8935f,
 								  0.9375f, 0.9815f, 1.0255f, 1.0695f,
-								  1.1250f, 1.1575f, 1.2015f, -1.f};
+								  1.1250f, 1.1575f, 1.2015f, 0.f};
 
-static const float mpeg2_dar[] = {-1.f, 1.f, 4/3.f, 16/9.f,
-								  2.21f/1.f, -1.f, -1.f, -1.f,
-								  -1.f, -1.f, -1.f, -1.f,
-								  -1.f, -1.f, -1.f, -1.f};
+static const float mpeg2_dar[] = {0.f, 1.f, 4/3.f, 16/9.f,
+								  2.21f/1.f, 0.f, 0.f, 0.f,
+								  0.f, 0.f, 0.f, 0.f,
+								  0.f, 0.f, 0.f, 0.f};
 
-static const float mpeg1_framerate[] = {-1.f, 24000/1001.f, 24.f, 25.f,
+static const float mpeg1_framerate[] = {0.f, 24000/1001.f, 24.f, 25.f,
 										30000/1001.f, 30.f, 50.f, 60000/1001.f,
-										60.f, -1.f, -1.f, -1.f,
-										-1.f, -1.f, -1.f, -1.f};
+										60.f, 0.f, 0.f, 0.f,
+										0.f, 0.f, 0.f, 0.f};
+										
+static const uint8_t m1v_frame_type[] = {0, 'I', 'P', 'B', 'D'};
 
 typedef struct M1V_INFO
 {
-	uint8_t codec : 2; // 1 = m1v, 2 = m2v
-	uint8_t last_stream_id;
 	uint64_t file_size;
 	uint64_t file_pos;
 	uint8_t* file_buffer;
-	FILE* file_pointer;
+	
+	uint8_t codec : 2; // 1 = m1v, 2 = m2v
+	uint8_t last_stream_id;
+	
+	uint64_t* frames_positions; // Awful hack of awful person
+	uint64_t cur_frame;
 	
 	// Sequence header
 	uint16_t width : 12; // Horizontal size
@@ -63,6 +68,9 @@ typedef struct M1V_INFO
 	uint8_t time_hour : 5;
 	uint8_t time_minute : 6;
 	uint8_t time_second : 6;
+	
+	uint32_t time_milliseconds;
+	double time_as_double;
 	
 	uint8_t gop_frame : 6;
 	uint8_t closed_gop : 1;
@@ -88,7 +96,6 @@ typedef struct M1V_INFO
 	// Slice
 	uint64_t slice_size;
 	
-	
 } M1v_info;
 
 /*
@@ -100,7 +107,7 @@ typedef struct M1V_INFO
 		1 on file error
 		2 on malloc error
 */
-uint8_t m1v_init(uint8_t* file_path, M1v_info* m1v);
+uint8_t m1v_init(const uint8_t* file_path, M1v_info* m1v);
 
 /*
 	Frees contents of the struct
@@ -116,13 +123,23 @@ void m1v_destroy(M1v_info* m1v);
 uint64_t m1v_next_packet(M1v_info* m1v);
 
 /*
-	Checks
+*	Checks
 */
 
 uint8_t m1v_is_slice(const uint8_t stream_id);
 uint8_t m1v_is_slice_sync(const uint32_t sync);
 
 uint64_t m1v_find_next_valid(const uint8_t* data, M1v_info* m1v);
+
+/*
+	It will read the entire file if valid, or nothing,
+	unless by some miracle data is valid.
+	
+	codec==0 on error
+	anything else on success
+*/
+//uint8_t m1v_test_file(const uint8_t* filename);
+M1v_info m1v_test_file(const uint8_t* filename);
 
 /*
 	m1v packets

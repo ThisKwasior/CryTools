@@ -1,16 +1,18 @@
 #include "adx.h"
 
-ADX read_adx_info(FILE* adx_file)
+ADX adx_read_info(const uint8_t* file_path)
 {
 	ADX adx;
+	memset(&adx, 0, sizeof(adx));
 	
 	/* 
 		Checking if the file is indeed ADX or AIX.
 		If not, magic will be 0xFFFF
 	*/
 	
-	const uint8_t is_valid = check_adx_file(adx_file);
-	rewind(adx_file);
+	const uint8_t is_valid = adx_check_file(file_path);
+	
+	FILE* adx_file = fopen(file_path, "rb");
 	
 	switch(is_valid)
 	{
@@ -94,19 +96,33 @@ ADX read_adx_info(FILE* adx_file)
 
 	fseek(adx_file, 0, SEEK_END);
 	adx.file_size = ftell(adx_file);
+	
 	rewind(adx_file);
+	
+	// Load file
+	adx.file_buffer = (uint8_t*)malloc(adx.file_size);
+	
+	if(adx.file_buffer != NULL)
+	{
+		fread(adx.file_buffer, adx.file_size, 1, adx_file);
+	}
+	
+	fclose(adx_file);
 
 	return adx;
 }
 
-uint8_t check_adx_file(FILE* adx_file)
+uint8_t adx_check_file(const uint8_t* file_path)
 {
+	FILE* adx_file = fopen(file_path, "rb");
+
 	const uint8_t magic_adx[2] = {0x80, 0x00};
 	uint8_t magic[6];
 	fread(magic, sizeof(uint8_t), 4, adx_file);
 	
 	if(strncmp(magic, "AIXF", 4) == 0)
 	{
+		fclose(adx_file);
 		return 2;
 	}
 	
@@ -125,9 +141,16 @@ uint8_t check_adx_file(FILE* adx_file)
 		
 		if(is_adx == 1)
 		{
+			fclose(adx_file);
 			return 1;
 		}
 	}
 	
+	fclose(adx_file);
 	return 0;
+}
+
+void adx_free(ADX* adx)
+{
+	if(adx->file_buffer) free(adx->file_buffer);
 }

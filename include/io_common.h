@@ -5,27 +5,6 @@
 #include <stdlib.h>
 #include <stdio.h>
 
-typedef struct FileDescriptor
-{
-	FILE* f;
-	uint8_t is_adx;
-	uint8_t is_aix;
-	uint8_t is_mpeg;
-	uint8_t is_output;
-	
-	uint64_t file_size;
-	uint32_t stream_id;
-	
-	float adx_scr_step;
-	float adx_cur_scr;
-	uint32_t adx_frame_count;
-	uint8_t channel_count;
-	uint16_t sample_rate;
-	
-	uint8_t file_done;
-	
-} File_desc;
-
 /*
 	Reading
 */

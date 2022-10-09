@@ -5,7 +5,7 @@
 #include <stdint.h>
 #include <string.h>
 
-#include <adx.h>
+#include <common.h>
 
 /*
 	https://en.wikipedia.org/wiki/Packetized_elementary_stream
@@ -44,8 +44,8 @@
 #define MPEG_MAX_AUDIO_STREAMS 32
 #define MPEG_VIDEO_START_ID 0x000001E0
 #define MPEG_AUDIO_START_ID 0x000001C0
-#define MPEG_MAX_DATA_SIZE 2047
-#define MPEG_DATA_MAX_TO_2048 2035
+#define MPEG_DVD_BLOCK 2048
+#define MPEG_MAX_DATA_SIZE 2047 // 0x7FF
 
 #define STREAM_VIDEO 1
 #define STREAM_AUDIO 2
@@ -63,7 +63,7 @@
 	Types
 */
 
-struct Mpeg1Frame
+typedef struct Mpeg1Frame
 {
 	uint16_t len;
 	int32_t sync;
@@ -79,7 +79,7 @@ struct Mpeg1Frame
 	
 	uint64_t last_pts : 33;
 	uint64_t last_dts : 33;
-};
+} mpeg_frame_s;
 
 struct MpegStreamInfo
 {
@@ -118,10 +118,10 @@ void mpeg_read_info_from_data(uint8_t* data, struct MpegStreamInfo* info);
 */
 
 /*
-	Decodes the MPEG SCR.
-	Takes the pointer to array of 5 bytes beginning with 0010b.
+	Decodes the MPEG SCR/PTS/DTS.
+	Takes the pointer to array of 5 bytes beginning with 0010b or 0011b.
 
-	Returns decoded MPEG-1 SCR value.
+	Returns decoded MPEG-1 SCR/PTS/DTS value.
 */
 uint64_t mpeg_decode_scr(const uint8_t* const scr_array);
 
@@ -133,10 +133,19 @@ uint64_t mpeg_decode_scr(const uint8_t* const scr_array);
 void mpeg_encode_scr(uint8_t* arr, const uint64_t scr_value);
 
 /*
+	Encodes the MPEG-1 PTS/DTS from 33bit numbers, part of the extension
+	
+	`arr` should have space for 10 bytes of information, if both
+	pts and dts are being encoded, otherwise 5 if pts only.
+	dts being only one is invalid.
+*/
+uint8_t mpeg_encode_pts_dts(uint8_t* arr, const uint64_t pts, const uint64_t dts);
+
+/*
 	Write MPEG1 Program End packet.
 	Basically the 'end' of the file
 */
-void mpeg_write_prog_end(FILE* f);
+void mpeg_write_prog_end(FILE* file);
 
 /*
 	Write MPEG1 Padding packet directly to a file.
@@ -146,3 +155,32 @@ void mpeg_write_prog_end(FILE* f);
 */
 void mpeg_write_padding(FILE* file, const uint16_t padding_size);
 
+/*
+	Write MPEG1 Pack Header packet directly to a file.
+	
+	`scr` is global scr
+	`mux_rate` is ignored for now
+	
+	size of the packet is always 0xC
+*/
+void mpeg_write_pack_header(FILE* file, const uint64_t scr, const uint32_t mux_rate);
+
+/*
+	Write MPEG1 System Header packet directly to a file.
+	Pretty naive approach.
+	
+	`audio_bound` - audio files amount
+	`video_bound` - video files amount
+	
+	returns bytes written
+*/
+uint16_t mpeg_write_system_header(FILE* file, const uint8_t audio_bound, const uint8_t video_bound);
+
+
+/*
+	stream packet
+*/
+uint16_t mpeg_prep_stream_packet(uint8_t* buffer, const uint32_t stream_id,
+								 const uint8_t* data, const uint64_t data_size, uint16_t available, 
+								 const uint8_t buffer_scale, const uint16_t buffer_size,
+								 const uint64_t pst, const uint64_t dst);

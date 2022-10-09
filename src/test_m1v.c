@@ -15,16 +15,28 @@ int main(int argc, char** argv)
 	
 	// Init m1v struct
 	M1v_info m1v;
-	const uint8_t m1v_status = m1v_init(argv[1], &m1v);
+	const uint8_t status = m1v_init(argv[1], &m1v);
+	
+	if(status != 0)
+	{
+		printf("====Not a valid m1v/m2v file.\n");
+		fprintf(flog, "====Not a valid m1v/m2v file.\n");
+		return 0;
+	}
+	
+	/*const uint8_t m1v_status = m1v_init(argv[1], &m1v);
 	
 	if(m1v_status != 0)
 	{
 		printf("====Something wrong with the file. Status: %u\n", m1v_status);
 		fprintf(flog, "====Something wrong with the file. Status: %u\n", m1v_status);
-	}
+		return 0;
+	}*/
 	
 	printf("====Size: %u\n", m1v.file_size);
 	fprintf(flog, "====Size: %u\n", m1v.file_size);
+	
+	m1v.file_pos = 0;
 	
 	// Check stuff
 	uint64_t finished = 1;
@@ -60,7 +72,7 @@ int main(int argc, char** argv)
 				
 			case 0x00: // Picture header
 				fprintf(flog, "\ttemp_seq_num: %u\n", m1v.temp_seq_num);	// temporal sequence number
-				fprintf(flog, "\tframe_type: %u\n", m1v.frame_type);		// 1=I, 2=P, 3=B, 4=D
+				fprintf(flog, "\tframe_type: %c\n", m1v_frame_type[m1v.frame_type]);		// 1=I, 2=P, 3=B, 4=D
 				fprintf(flog, "\tvbv_delay: %u\n", m1v.vbv_delay);
 				
 				if((m1v.frame_type == M1V_FRAME_P) || (m1v.frame_type == M1V_FRAME_B))
@@ -110,8 +122,14 @@ int main(int argc, char** argv)
 	else if(m1v.codec == 2) printf("\tAspect ratio: %.3lf\n", mpeg2_dar[m1v.aspect_ratio]);
 
 	printf("\tFramerate: %.3lf\n", mpeg1_framerate[m1v.frame_rate]);
-	const uint32_t milliseconds = ((m1v.gop_frame)/(mpeg1_framerate[m1v.frame_rate]))*1000;
-	printf("\tLength: %02u:%02u:%02u.%03u\n", m1v.time_hour, m1v.time_minute, m1v.time_second, milliseconds);
+	printf("\tLength: %02u:%02u:%02u.%03u\n", m1v.time_hour, m1v.time_minute, m1v.time_second, m1v.time_milliseconds);
+	printf("\tLength as float: %f\n", m1v.time_as_double);
+	
+	for(uint64_t i = 0; i != m1v.cur_frame; ++i)
+	{
+		printf("[% 4u] 0x%x\n", i, m1v.frames_positions[i]);
+		fprintf(flog, "[% 4u] 0x%x\n", i, m1v.frames_positions[i]);
+	}
 	
 	// Cleanup
 	m1v_destroy(&m1v);

@@ -1,39 +1,46 @@
 #include <m1v.h>
 
-uint8_t m1v_init(uint8_t* file_path, M1v_info* m1v)
+uint8_t m1v_init(const uint8_t* file_path, M1v_info* m1v)
 {
+	FILE* file_pointer;
+	uint8_t ret = 0;
+	
 	memset(m1v, 0, sizeof(M1v_info));
 	
 	// Opening a file
-	m1v->file_pointer = fopen(file_path, "rb");
+	file_pointer = fopen(file_path, "rb");
 	
-	if(m1v->file_pointer == NULL)
+	if(file_pointer == NULL)
 	{
-		return 1;
+		ret = 1;
+	}
+	else
+	{
+		// Load file
+		fseek(file_pointer, 0, SEEK_END);
+		m1v->file_size = ftell(file_pointer);
+		fseek(file_pointer, 0, SEEK_SET);
+		m1v->file_buffer = (uint8_t*)malloc(m1v->file_size);
+		
+		if(m1v->file_buffer == NULL)
+		{
+			ret = 2;
+		}
+		else
+		{
+			fread(m1v->file_buffer, m1v->file_size, 1, file_pointer);
+			fclose(file_pointer);
+		}
 	}
 	
-	// Load file
-	fseek(m1v->file_pointer, 0, SEEK_END);
-	m1v->file_size = ftell(m1v->file_pointer);
-	fseek(m1v->file_pointer, 0, SEEK_SET);
-	m1v->file_buffer = (uint8_t*)malloc(m1v->file_size);
-	fread(m1v->file_buffer, m1v->file_size, 1, m1v->file_pointer);
-	fclose(m1v->file_pointer);
-	
-	if(m1v->file_buffer == NULL)
-	{
-		return 2;
-	}
-	
-	return 0;
+	return ret;
 }
 
 void m1v_destroy(M1v_info* m1v)
 {
-	free(m1v->file_buffer);
-	free(m1v->user_data);
-	
-	fclose(m1v->file_pointer);
+	if(m1v->file_buffer) free(m1v->file_buffer);
+	if(m1v->user_data) free(m1v->user_data);
+	if(m1v->frames_positions) free(m1v->frames_positions);
 }
 
 uint64_t m1v_next_packet(M1v_info* m1v)
@@ -138,7 +145,51 @@ uint64_t m1v_find_next_valid(const uint8_t* data, M1v_info* m1v)
 	
 	return ret;
 }
+
+M1v_info m1v_test_file(const uint8_t* filename)
+{
+	// Init m1v struct
+	M1v_info m1v;
+	const uint8_t m1v_status = m1v_init(filename, &m1v);
 	
+	if(m1v_status != 0)
+	{
+		m1v.codec = 0;
+		return m1v;
+	}
+
+	// If 0, it'll stop parsing
+	uint64_t finished = 1;
+	
+	while(finished)
+	{
+		finished = m1v_next_packet(&m1v);
+		if(finished == 0) break;
+		const uint8_t stream_id = m1v.last_stream_id;
+		
+		// Parse
+		switch(stream_id)
+		{
+			case 0xB3: // Sequence Header
+			case 0xB8: // Group of Pictures
+			case 0x00: // Picture header
+			case 0xB2: // User data
+			case 0xB5: // Extension
+				break;
+			
+			default:
+				if(m1v_is_slice(stream_id) == 0) // Is slice
+					finished = 0;
+		}
+	}
+
+	//const uint8_t ret = (m1v.width*m1v.height*mpeg1_par[m1v.aspect_ratio]*mpeg1_framerate[m1v.frame_rate]) != 0 ? 255 : 0;
+	
+	// Cleanup
+	//m1v_destroy(&m1v);
+	
+	return m1v;
+}
 
 /*
 	m1v packets
@@ -195,6 +246,9 @@ uint64_t m1v_gop(const uint8_t* data, M1v_info* m1v)
 	m1v->closed_gop = (first_4_bytes&0x00000040)>>6;
 	m1v->broken_gop = (first_4_bytes&0x00000020)>>5;
 	
+	m1v->time_milliseconds = ((m1v->gop_frame)/(mpeg1_framerate[m1v->frame_rate]))*1000;
+	m1v->time_as_double = (m1v->time_hour*60*60)+(m1v->time_minute*60)+(m1v->time_second)+(m1v->time_milliseconds/1000.f);
+	
 	return ret;
 }
 
@@ -223,6 +277,10 @@ uint64_t m1v_picture_header(const uint8_t* data, M1v_info* m1v)
 			m1v->backward_f_code = (last_2_bytes&0x0038)>>3;
 		}
 	}
+	
+	m1v->cur_frame += 1;
+	m1v->frames_positions = (uint64_t*)realloc(m1v->frames_positions, sizeof(uint64_t)*m1v->cur_frame);
+	m1v->frames_positions[m1v->cur_frame-1] = m1v->file_pos;
 	
 	return ret;
 }

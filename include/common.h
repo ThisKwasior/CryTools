@@ -2,6 +2,8 @@
 
 #include <stdint.h>
 
+#define BIT(x) (1<<(x))
+
 uint16_t change_order_16(const uint16_t n);
 
 uint32_t change_order_32(const uint32_t n);
