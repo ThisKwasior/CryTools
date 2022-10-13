@@ -65,12 +65,12 @@ int main(int argc, char** argv)
 	
 	FILE* yuv_file = fopen(argv[1], "rb");
 	fseek(yuv_file, 0, SEEK_END);
-	const uint64_t yuv_file_size = ftell(yuv_file);
+	const uint64_t yuv_file_size = ftello64(yuv_file); // Files can get bigger than 2GB
 	fseek(yuv_file, 0, SEEK_SET);
 	
 	FILE* sfd_file = fopen(argv[2], "rb");
 	fseek(sfd_file, 0, SEEK_END);
-	const uint64_t sfd_file_size = ftell(sfd_file);
+	const uint64_t sfd_file_size = ftello64(sfd_file); // Files can get bigger than 2GB
 	fseek(sfd_file, 0, SEEK_SET);
 	
 	mpeg_frame_s mpeg_frame = {0};
@@ -124,7 +124,7 @@ int main(int argc, char** argv)
 	printf("WIDTH:   %u\n", m1v_info.width);
 	printf("HEIGHT:  %u\n", m1v_info.height);
 	printf("BPF:     %u\n", bytes_per_frame);
-	printf("BPF RGB: %u\n", bytes_per_frame_rgb);
+	printf("YUVSIZE: %u\n", yuv_file_size);
 	printf("FRAMES:  %u\n", frames_total);
 	
 	uint8_t* frame_yuv_types = (uint8_t*)malloc(frames_total);
@@ -132,6 +132,7 @@ int main(int argc, char** argv)
 	
 	uint32_t bytes_read = 0;
 	uint32_t it = 0;
+	uint32_t c_pos = 0;
 	while(bytes_read = m1v_next_packet(&m1v_info))
 	{
 		if(m1v_info.last_stream_id == 0xB2)
@@ -142,6 +143,16 @@ int main(int argc, char** argv)
 			if(strncmp("<SUDPS_>", &str[0], 8) == 0)
 			{
 				frame_yuv_types[it++] = str[19];
+				
+				if((str[19] == 'C') && (c_pos == 0))
+				{
+					c_pos = it;
+				}
+				else if((str[19] != 'C') && (c_pos != 0))
+				{
+					printf("CSC: %u-%u\n",c_pos, it-1);
+					c_pos = 0;
+				}
 			}
 		}
 	}
@@ -169,7 +180,7 @@ int main(int argc, char** argv)
 				yuv.v.data[i] = sfd_csc_to_raw_uv(yuv.v.data[i]);
 			}
 		}
-		
+
 		/*conv_YUV420_plane_to_RGB(m1v_info.width, m1v_info.height,
 								 yuv.y.data, yuv.v.data,
 								 yuv.u.data, rgb_buffer);*/
