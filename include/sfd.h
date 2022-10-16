@@ -51,7 +51,7 @@
 		Some games need it, some games don't. I have no idea how
 		it works. It has two versions - "SofdecStream" and "SofdecStream2".
 		Structure layout for these is later down this file.
-		Search for "SOFDEC METADATA".
+		Search for "Metadata".
 	- Pack Header (0xBA)
 	- Private Stream 2 (0xBF) - Human-readable info about video stream(s).
 		Isn't needed I think, but I guess it won't hurt to write some silly
@@ -73,9 +73,19 @@
 */
 
 /*
+	Defines
+*/
 
+#define SFD_STREAM_AUDIO_TYPE_ADX = 0x00 // ADX/SFA
+#define SFD_STREAM_AUDIO_TYPE_AC3 = 0x02 // AC3 (Dolby Digital)
+#define SFD_STREAM_AUDIO_TYPE_AHX = 0x03 // AHX
+#define SFD_STREAM_AUDIO_TYPE_AIX = 0x04 // AIX
+
+#define SFD_STREAM2_AUDIO_TYPE_ADX = 0x01 // ADX/SFA
+#define SFD_STREAM2_AUDIO_TYPE_AIX = 0x03 // AIX
+
+/*
 	Lookup tables
-
 */
 
 static const uint8_t sfd_csc_y_lut[256] =
@@ -120,22 +130,26 @@ static const uint8_t sfd_csc_uv_lut[256] =
 };
 
 /*
-	SOFDEC METADATA
+	"SofdecStream            " Metadata
 */
 
-typedef union SFD_FILE_ENTRY
+typedef union SFD_METADATA_FILE_ENTRY
 {
 	struct __attribute__((__packed__)) SFD_AUDIO_ENTRY
 	{
-		uint8_t out_name[8]; // = {0x20}; // If longer than 8, just copy 8
+		uint8_t out_name[8]; // = {0x20};
 		uint8_t out_ext[4]; // = {'.', 's', 'f', 'd'};
 		uint8_t out_date[12]; //YYYYMMDDhhmm
-		uint8_t stream_id;
-		uint8_t padding[2];
+		uint8_t stream_id; // 0xC0
+		uint8_t audio_type; // 0x00 for SFA/ADX
+							// 0x02 for AC3 (Dolby Digital)
+							// 0x03 for AHX
+							// 0x04 for AIX
+							
+		uint8_t padding_0x1A; // = 0
 		uint8_t channels;
-		uint16_t sample_rate; // LE, sample rate
-		uint8_t padding2[2];
-		uint8_t padding3[32];
+		uint32_t sample_rate; // LE, sample rate
+		uint8_t padding_0x20[0x20]; // = {0}
 	} audio;
 	
 	struct __attribute__((__packed__)) SFD_VIDEO_ENTRY
@@ -143,198 +157,165 @@ typedef union SFD_FILE_ENTRY
 		uint8_t out_name[8]; // = {0x20}; // If longer than 8, just copy 8
 		uint8_t out_ext[4]; // = {'.', 's', 'f', 'd'};
 		uint8_t out_date[12]; //YYYYMMDDhhmm
-		uint8_t stream_id;
-		uint8_t padding;
-		uint8_t padding_FF[2]; // = {0xFF, 0xFF};
-		uint8_t width; // 4 lowest bits of first byte and 4 highest bits of second byte
+		uint8_t stream_id; // 0xE0
+		uint8_t stream_id_01; // 0x01
+		uint8_t padding_0x1A[2]; // = {0xFF, 0xFF};
+		uint8_t width; // Only first byte of 16bit width. Weird, because height is full 16bit 
 		uint16_t height; // BE
-		uint8_t padding3[32];
-	} video;
-} sfd_file_entry;
-
-/*typedef union SFD_STREAM2_METADATA
-{
-	struct __attribute__((__packed__)) SFD_AUDIO_STREAM2
-	{
-		uint8_t stream_id;
-		uint8_t unk1 : 4; // 0
-		uint8_t audio_format : 4; // 1 for ADX, 3 for AIX
-		uint8_t channels : 4; // Audio channels in a file
-		uint8_t unk2 : 4; // 0
-		uint16_t sample_rate; // BE
-		
-		uint32_t unk3; // BE, some files have value in there
-					   // I have no idea what it means, but probably
-					   // is some kind of timestamp, divide it by file duration
-					   // and it's somewhat constant across files
-					   // with the same sample rate
-		
-		uint16_t unk4; // BE, some files have value in there
-					   // It also is bigger with file duration increasing
-					   
-		uint8_t unk5; // when sample rate is 0xBB80 (48000KHz), it's value changes to 0x80
-		uint8_t unk6;
-		uint8_t unk7;
-	} audio;
-	
-	struct __attribute__((__packed__)) SFD_VIDEO_STREAM2
-	{
-		uint8_t stream_id;
-		uint8_t unk1; // 0x41
-		uint16_t width; // BE, width of video
-		uint16_t height; // BE, height of video
-		
-		uint32_t frames; // BE, amount of frames in video
-		uint16_t framerate; // BE, framerate*1000
-		uint32_t unk2; // BE
-		
-		uint32_t unk3; // BE
-		uint32_t unk4; // BE, 0x00000000
-		uint32_t unk5; // BE, 0x00000000
-		uint32_t unk6; // BE, 0x00000000
-		
-		uint16_t unk7; // BE, 0x0100
-		uint16_t unk8; // BE, 0x0010
-		uint16_t unk9; // BE, 0x000F
-		uint16_t unk10; // BE, 0x0300
-		uint16_t unk11; // BE
-		uint16_t unk12; // BE
-		
-		uint8_t padding[0x14];
+		uint8_t padding_0x20[0x20];
 	} video;
 	
-} sfd_stream2_metadata;*/
-
-typedef struct __attribute__((__packed__)) SFD_AUDIO_STREAM2
-{
-	uint8_t stream_id;
-	uint8_t audio_format : 4; // 1 for ADX, 3 for AIX
-	uint8_t unk1 : 4; // 2
-	uint8_t unk2 : 4; // 0
-	uint8_t channels : 4; // Audio channels in a file
-	uint16_t sample_rate; // BE
+	struct __attribute__((__packed__)) SFD_SOFDEC_ENTRY
+	{
+		uint8_t out_name[8]; // = {0x20}; // If longer than 8, just copy 8
+		uint8_t out_ext[4]; // = {'.', 's', 'f', 'd'};
+		uint8_t out_date[12]; //YYYYMMDDhhmm
+		uint8_t padding[8]; // = {0}
+		uint8_t muxer_name[0x20]; // = {0x20}
+	} sofdec;
 	
-	uint32_t unk3; // BE, some files have value in there
-				   // I have no idea what it means, but probably
-				   // is some kind of timestamp, divide it by file duration
-				   // and it's somewhat constant across files
-				   // with the same sample rate
+	uint8_t data[0x40];
 	
-	uint16_t unk4; // BE, some files have value in there
-				   // It also is bigger with file duration increasing
-
-	uint16_t unk8; // BE, some files have value in there
-	
-	uint8_t unk5; // when sample rate is 0xBB80 (48000KHz), it's value changes to 0x80
-	uint8_t unk6;
-	uint8_t unk7;
-} sfd_stream2_audio_metadata;
-
-typedef struct __attribute__((__packed__)) SFD_VIDEO_STREAM2
-{
-	uint8_t stream_id;
-	uint8_t unk1; // 0x41
-	uint16_t width; // BE, width of video
-	uint16_t height; // BE, height of video
-	
-	uint32_t frames; // BE, amount of frames in video
-	uint16_t framerate; // BE, framerate*1000
-	uint32_t unk2; // BE
-	
-	uint32_t unk3; // BE
-	uint32_t unk4; // BE, 0x00000000
-	uint32_t unk5; // BE, 0x00000000
-	uint32_t unk6; // BE, 0x00000000
-	
-	uint16_t unk7; // BE, 0x0100
-	uint16_t unk8; // BE, 0x0010
-	uint16_t unk9; // BE, 0x000F
-	uint16_t unk10; // BE, 0x0300
-	uint16_t unk11; // BE
-	uint16_t unk12; // BE
-	
-	uint8_t padding[0x14];
-} sfd_stream2_video_metadata;
+} sfd_metadata_file_s;
 
 typedef struct __attribute__((__packed__)) SFD_STREAM
 {
 	uint8_t padding1[0x0E]; // = {0};
 	uint8_t sofdec_string[0x18]; // = "SofdecStream            ";
-	uint8_t unk1; // = 0x02; // Always 0x02 I think?
-	uint8_t unk2; // = 0x1C; // I've seen it as 0x1C, 0x19, could be random
-	uint8_t padding2[6]; // = {0};
+	uint8_t unk_0x26; // = 0x02; // Always 0x02 I think?
+	uint8_t unk_0x27; // = 0x1C; // I've seen it as 0x1C, 0x19, could be random
+	uint8_t padding_0x28[0x06]; // = {0};
 	
-	sfd_file_entry out_file;
+	sfd_metadata_file_s out_file;
 	
-	uint8_t padding3; // = 0;
-	uint8_t unk3; // = 0x08;
-	uint8_t padding4[6]; // = {0};
-	uint8_t unk4; // = 0x02;
-	uint8_t padding5[4]; // = {0};
-	uint8_t unk5; // = 0x08;
-	uint8_t padding6[34]; // = {0};
+	uint32_t mpeg_pack_size; // LE, usually 2048
+	uint32_t unk_0x70; // = 0x00000000
+	uint32_t unk_0x76; // = 0x02000000
+	uint32_t mpeg_pack_size_again; // LE, the same as mpeg_pack_size, whyyyy
+	uint8_t padding_0x7E[0x20]; // = {0};
 	
 	uint8_t total_streams;
 	uint8_t audio_streams;
 	uint8_t video_streams;
 	uint8_t private_streams; // = 0x01;
 	
-	uint32_t unk7; // LE
+	uint32_t unk_0xA2; // LE, gets bigger with more streams
 	uint32_t longest_audio_len; // LE, length in ms of longest audio stream
 	uint32_t longest_video_len; // LE, length in ms of longest video stream
 	uint32_t max_num_video_frames; // LE
-	uint32_t max_size_video_pictures; // LE
-	uint32_t avg_size_video_pictures; // LE
-	uint8_t padding7[0x14]; // = {0};
+	uint32_t max_size_pictures; // LE
+	uint32_t avg_size_pictures; // LE
+	uint8_t padding_0xBA[0x14]; // = {0};
 	
-	uint8_t user_comment[0x40]; // = {0x20};
+	uint8_t user_comment_0xCE[0x40]; // = {0x20};
 	
-	uint8_t padding8[0x60]; // = {0};
+	uint8_t padding_0x10E[0x60]; // = {0};
 	
-	sfd_file_entry stream_entries[26];
+	sfd_metadata_file_s reserved_stream;
+	sfd_metadata_file_s stream_entries[25];
 	
 } sfd_stream_s;
 
+/*
+	"SofdecStream2           " Metadata
+*/
+
+typedef struct __attribute__((__packed__)) SFD_AUDIO_ENTRY_STREAM2
+{
+	uint8_t stream_id;
+	
+	uint8_t unk_0x01_0 : 4; // 2
+	uint8_t audio_format : 4; // 1 for ADX, 3 for AIX
+	
+	uint8_t channels : 4; // Audio channels in a file
+	uint8_t unk_0x02_4 : 4; // 0
+	
+	uint16_t sample_rate; // BE
+	
+	uint32_t samplerate_x_duration;	// BE, first byte of sample_rate 
+									// times duration in seconds.
+									// Beats me what is it for.
+									// For example, sample rate is 0xBB80, 0xBB is 187
+									// 187 x 60 = 11220
+	
+	uint8_t unk_0x09; // some files have value in there
+	uint8_t unk_0x0A; // = 0
+
+	uint16_t unk_0x0B; // BE, some files have value in there
+	uint8_t unk_0x0D; // second byte of sample_rate
+	
+	uint16_t unk_0x0E; // = 0x0000
+
+} sfd_stream2_audio_metadata_s;
+
+typedef struct __attribute__((__packed__)) SFD_VIDEO_ENTRY_STREAM2
+{
+	uint8_t stream_id;
+	uint8_t unk_0x01; // 0x41
+	uint16_t width; // BE, width of video
+	uint16_t height; // BE, height of video
+	
+	uint32_t frames; // BE, amount of frames in video
+	uint16_t framerate; // BE, framerate*1000
+	
+	uint32_t unk_0x0C; // BE
+	uint32_t unk_0x10; // BE
+	uint8_t padding_0x14[0x0C];
+	
+	uint16_t unk_0x20; // BE, 0x0100
+	uint16_t unk_0x22; // BE, 0x0010
+	uint16_t unk_0x24; // BE, 0x000F
+	uint16_t unk_0x26; // BE, 0x0300
+	uint16_t unk_0x28; // BE, something with width of a frame
+	uint16_t unk_0x2A; // BE, something with height of a frame
+	uint8_t padding[0x14];
+	
+} sfd_stream2_video_metadata_s;
+
 typedef struct __attribute__((__packed__)) SFD_STREAM2
 {
-	uint8_t unk1; // = 8;
-	uint8_t padding1[0x0D]; // = {0};
-	uint8_t sofdec2_string[0x18]; // = "SofdecStream2           ";
-	uint8_t unk2; // = 0x02; // Always 0x02 I think?
-	uint8_t unk3; // I've seen it as 0x01, 0x03
-	uint8_t unk4; // = 0x02; // The same as unk2
-	uint8_t unk5; // I've seen it as 0x27, 0x49
-	uint8_t padding2[4]; // = {0};
+	uint16_t mpeg_pack_size; // BE, = 2048
+	uint8_t padding_0x02[0x0C]; // = {0};
+	uint8_t sofdec_string[0x18]; // = "SofdecStream2           ";
 	
-	uint8_t muxer_program[0x20];
+	/* 
+	Could be some kind of muxer/encoder representation.
+	Muxers go as follows:
+		Gens			- "CRI Sofdec Craft Ver.4.07.00"
+		Colors			- "CRI Sofdec Craft Ver.4.07.00"
+		Unleashed		- "SFM Ver.2.39 2008-06-04 CRI-MW  "
+		Metroid Other M	- "CRI Sofdec Craft Ver.3.00.00"		*/
+	/*					 Gens	Colors	Other M		Unleashed	*/
+	uint8_t unk_0x26; // 0x02	0x02	0x02		0x02
+	uint8_t unk_0x27; // 0x03	0x03	0x03		0x01
+	uint8_t unk_0x28; // 0x02	0x02	0x02		0x02
+	uint8_t unk_0x29; // 0x49	0x33	0x33		0x27
+	uint8_t padding_0x2A[0x04];	// = {0}
+	uint8_t muxer_name[0x20]; 	// = {0x20}
 	
-	uint8_t padding3[0x60];
-	
+	uint8_t padding_0x4E[0x60];	// = {0}
+								// Could be a comment here, like stream1
+								
 	uint8_t total_streams;
 	uint8_t audio_streams;
 	uint8_t video_streams;
 	uint8_t private_streams; // = 0x01;
-	uint32_t unk6; // BE
-	uint32_t longest_audio_len; // BE, length in ms of longest audio stream
-	uint32_t longest_video_len; // BE, length in ms of longest video stream
+								
+	uint32_t unk_0xB2;	// BE
+	uint32_t longest_audio_len;	// BE, length in ms of longest audio stream
+	uint32_t longest_video_len;	// BE, length in ms of longest video stream
+	uint32_t max_num_video_frames;	// BE
+	uint32_t unk_0xC2;	// BE
+	uint32_t unk_0xC6;	// BE
+	uint32_t unk_0xCA;	// BE, never bigger than 255
+	uint8_t padding_0xCE[0xE0];	// = {0};
 	
-	uint32_t max_num_video_frames; // BE
-	uint32_t max_size_video_pictures; // BE
-	uint32_t avg_size_video_pictures; // BE
-	uint32_t unk12; // BE
+	sfd_stream2_audio_metadata_s audio_entries[32];
+	sfd_stream2_video_metadata_s video_entries[16];
 	
-	uint32_t unk14; // 0x00000000
-	uint32_t unk15; // BE, in Unleashed and Black Knight, it's 0,
-					// in other games there's a value		
-	uint32_t unk16; // 0x00000000
-	uint32_t unk17; // 0x00000000
-
-	uint8_t padding4[0xD0];
-	
-	sfd_stream2_audio_metadata audio_entries[32];
-	sfd_stream2_video_metadata video_entries[16];
-	
-	uint8_t padding5[0x40];
+	uint8_t padding_0x7AE[0x20];	// = {0};
+	uint8_t unk_0x7CE; // = 0xBF
+	uint8_t padding_0x7CF[0x1F];	// = {0};
 	
 } sfd_stream2_s;
 
@@ -343,8 +324,9 @@ typedef struct __attribute__((__packed__)) SFD_STREAM2
 	Sofdec encoder. Its contents are a mystery to me, but after
 	"<SUDPS_><000006>02A" or "<SUDPS_><000005>02A"
 	there's one byte that specifies the conversion mode for YUV components:
-		- "N" = normal, bt601 matrix
-		- "C" = color space compensation (csc), custom matrices specified by trial-and-error
+		- "N" = normal, bt601 matrix (i guess)
+		- "C" = color space compensation (csc), 
+				custom matrices specified by trial-and-error
 			    in sfd_csc_*_lut[256]
 				
 	Fun fact - some games won't play video without this data present.
