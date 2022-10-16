@@ -2,7 +2,7 @@
 
 PROGRAMS=("test_mpeg" "test_adx" "sfdmux")
 INCLUDES=-I./include
-LIBS="./lib/mpeg.c ./lib/utils.c ./lib/adx.c ./lib/sfd.c"
+LIBS="./lib/common.c ./lib/mpeg.c ./lib/utils.c ./lib/adx.c ./lib/sfd.c"
 ARGS="-Qn -O2 -s"
 
 mkdir bin
