@@ -109,7 +109,7 @@ struct MpegStreamInfo
 	TODO:
 	Check if audio frame is ADX (0x4004)
 */
-void mpeg_get_next_frame(FILE* mpegfile, struct Mpeg1Frame* frame);
+void mpeg_get_next_frame(FILE* mpegfile, mpeg_frame_s* frame);
 
 /*
 	Get info about the m1v/m2v stream

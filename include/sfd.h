@@ -76,17 +76,27 @@
 	Defines
 */
 
-#define SFD_STREAM_AUDIO_TYPE_ADX = 0x00 // ADX/SFA
-#define SFD_STREAM_AUDIO_TYPE_AC3 = 0x02 // AC3 (Dolby Digital)
-#define SFD_STREAM_AUDIO_TYPE_AHX = 0x03 // AHX
-#define SFD_STREAM_AUDIO_TYPE_AIX = 0x04 // AIX
+#define SFD_STREAM_AUDIO_TYPE_ADX 0x00 // ADX/SFA
+#define SFD_STREAM_AUDIO_TYPE_AC3 0x02 // AC3 (Dolby Digital)
+#define SFD_STREAM_AUDIO_TYPE_AHX 0x03 // AHX
+#define SFD_STREAM_AUDIO_TYPE_AIX 0x04 // AIX
 
-#define SFD_STREAM2_AUDIO_TYPE_ADX = 0x01 // ADX/SFA
-#define SFD_STREAM2_AUDIO_TYPE_AIX = 0x03 // AIX
+#define SFD_STREAM2_AUDIO_TYPE_ADX 0x01 // ADX/SFA
+#define SFD_STREAM2_AUDIO_TYPE_AIX 0x03 // AIX
 
 /*
 	Lookup tables
 */
+
+static const char* sfd_audio_formats[] =
+{
+	"ADX/SFA", "AC3", "AHX", "AIX"
+};
+
+static const char* sfd_audio_formats_2[] =
+{
+	"", "ADX/SFA", "", "AIX"
+};
 
 static const uint8_t sfd_csc_y_lut[256] =
 {
@@ -159,7 +169,7 @@ typedef union SFD_METADATA_FILE_ENTRY
 		uint8_t out_date[12]; //YYYYMMDDhhmm
 		uint8_t stream_id; // 0xE0
 		uint8_t stream_id_01; // 0x01
-		uint8_t padding_0x1A[2]; // = {0xFF, 0xFF};
+		uint16_t padding_0x1A; // = 0xFFFF;
 		uint8_t width; // Only first byte of 16bit width. Weird, because height is full 16bit 
 		uint16_t height; // BE
 		uint8_t padding_0x20[0x20];
@@ -224,15 +234,16 @@ typedef struct __attribute__((__packed__)) SFD_AUDIO_ENTRY_STREAM2
 {
 	uint8_t stream_id;
 	
-	uint8_t unk_0x01_0 : 4; // 2
 	uint8_t audio_format : 4; // 1 for ADX, 3 for AIX
+	uint8_t unk_0x01_0 : 4; // 2
 	
-	uint8_t channels : 4; // Audio channels in a file
 	uint8_t unk_0x02_4 : 4; // 0
+	uint8_t channels : 4; // Audio channels in a file
+
 	
 	uint16_t sample_rate; // BE
 	
-	uint32_t samplerate_x_duration;	// BE, first byte of sample_rate 
+	uint32_t rate_x_duration;	// BE, first byte of sample_rate 
 									// times duration in seconds.
 									// Beats me what is it for.
 									// For example, sample rate is 0xBB80, 0xBB is 187
@@ -318,6 +329,12 @@ typedef struct __attribute__((__packed__)) SFD_STREAM2
 	uint8_t padding_0x7CF[0x1F];	// = {0};
 	
 } sfd_stream2_s;
+
+typedef union SFD_STREAM_STREAM2
+{
+	sfd_stream_s s1;
+	sfd_stream2_s s2;
+} sfd_streams_u;
 
 /*
 	Before every frame, there's some user data inserted by

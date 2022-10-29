@@ -27,11 +27,13 @@ int main(int argc, char** argv)
 		{
 			case 0xFFFFFFFF:
 				printf("\tSCR: %llu\n", frame.last_scr);
+				printf("\tSCR: %f\n", frame.last_scr/(float)MPEG_SCR_MUL);
 				break;
 				
 			case STREAM_AUDIO:
 				
 				printf("\tSCR: %llu\n", frame.last_scr);
+				printf("\tSCR: %f\n", frame.last_scr/(float)MPEG_SCR_MUL);
 				
 				if(frame.is_adx)
 					printf("\tIS ADX\n");
@@ -41,6 +43,7 @@ int main(int argc, char** argv)
 			case STREAM_VIDEO:
 				
 				printf("\tSCR: %llu\n", frame.last_scr);
+				printf("\tSCR: %f\n", frame.last_scr/(float)MPEG_SCR_MUL);
 
 				break;
 		}

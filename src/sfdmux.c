@@ -140,25 +140,6 @@ void write_initial_packets(File_desc* files, const uint8_t files_amount)
 	// SofdecStream
 	mpeg_write_pack_header(files[0].f, scr_to_encode, 0);
 	sfd_sofdec2_mpeg_packet(files, files_amount);
-	
-	// Metadata after sofdec packet, can be anything i think
-	// Never mind it CANNOT BE ANYTHING
-	// Sonic Black Knight won't even play the video with
-	// this "silly comment!" thing
-	// WHAT EVEN IS THIS FORMAT, CRIWARE
-	/*dvd_boundary = MPEG_DVD_BLOCK;
-	mpeg_write_pack_header(files[0].f, scr_to_encode, 0);
-	dvd_boundary -= 0xC;
-	
-	const uint32_t mpeg_ps_priv2 = change_order_32(PS_PRIV2);
-	const uint8_t message[] = "Silly comment!";
-	const uint16_t data_size = change_order_16(sizeof(message)-1);
-	fwrite(&mpeg_ps_priv2, sizeof(uint32_t), 1, files[0].f);
-	fwrite(&data_size, sizeof(uint16_t), 1, files[0].f);
-	fwrite(&message, sizeof(message)-1, 1, files[0].f);
-	dvd_boundary -= 0x14;*/
-	
-	//mpeg_write_padding(files[0].f, dvd_boundary);
 }
 
 void prepare_mpeg_frame(File_desc* file, uint8_t* buffer, uint16_t* data_size, const uint16_t available)

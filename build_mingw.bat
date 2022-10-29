@@ -3,7 +3,7 @@ echo OFF
 set INCLUDES= -I./include
 set ARGS_DEBUG= -flto -g3 -std=c99
 set ARGS_RELEASE= -flto -O3 -s -std=c99
-set ARGS= %ARGS_RELEASE%
+set ARGS= %ARGS_DEBUG%
 
 mkdir bin
 
@@ -27,5 +27,10 @@ gcc "./src/test_mpeg.c" -o "./bin/test_mpeg.exe" %ARGS% %INCLUDES% ^
 echo Building csc_video_conv
 gcc "./src/csc_video_conv.c" -o "./bin/csc_video_conv.exe" %ARGS% %INCLUDES% ^
 	./lib/mpeg.c ./lib/sfd.c ./lib/plane_converters.c ./lib/common.c ./lib/m1v.c ./lib/pathutils.c
+
+echo Building sfdinfo
+gcc "./src/sfdinfo.c" -o "./bin/sfdinfo.exe" %ARGS% %INCLUDES% ^
+	./lib/mpeg.c ./lib/sfd.c ./lib/common.c ./lib/fd.c ^
+	./lib/m1v.c
 
 pause

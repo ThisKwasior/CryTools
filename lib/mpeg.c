@@ -1,6 +1,6 @@
 #include "mpeg.h"
 
-void mpeg_get_next_frame(FILE* mpegfile, struct Mpeg1Frame* frame)
+void mpeg_get_next_frame(FILE* mpegfile, mpeg_frame_s* frame)
 {	
 	frame->sync = 0;
 	frame->len = 0;
@@ -13,8 +13,6 @@ void mpeg_get_next_frame(FILE* mpegfile, struct Mpeg1Frame* frame)
 	frame->len = 4;
 
 	frame->sync = change_order_32(frame->sync);
-
-	free(frame->data);
 
 	switch(frame->sync)
 	{

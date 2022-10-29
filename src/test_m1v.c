@@ -127,7 +127,7 @@ int main(int argc, char** argv)
 	
 	for(uint64_t i = 0; i != m1v.cur_frame; ++i)
 	{
-		printf("[% 4u] 0x%x\n", i, m1v.frames_positions[i]);
+		//printf("[% 4u] 0x%x\n", i, m1v.frames_positions[i]);
 		fprintf(flog, "[% 4u] 0x%x\n", i, m1v.frames_positions[i]);
 	}
 	
